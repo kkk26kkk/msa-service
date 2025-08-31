@@ -1,0 +1,348 @@
+### Order Service API 테스트 스크립트
+### VS Code REST Client 또는 IntelliJ HTTP Client에서 사용 가능
+
+### 변수 설정
+@host = localhost:8082
+@contentType = application/json
+
+### 1. 헬스 체크
+GET http://{{host}}/orders/health
+
+###
+
+### 2. 주문 생성 (회원 ID 1번 - admin)
+POST http://{{host}}/orders
+Content-Type: {{contentType}}
+
+{
+  "memberId": 1,
+  "productName": "게이밍 노트북",
+  "quantity": 1,
+  "unitPrice": 2500000.00,
+  "orderMemo": "고성능 게이밍 노트북 주문"
+}
+
+###
+
+### 3. 두 번째 주문 생성 (회원 ID 2번 - user1)
+POST http://{{host}}/orders
+Content-Type: {{contentType}}
+
+{
+  "memberId": 2,
+  "productName": "무선 이어폰",
+  "quantity": 2,
+  "unitPrice": 150000.00,
+  "orderMemo": "선물용 무선 이어폰 2개"
+}
+
+###
+
+### 4. 존재하지 않는 회원으로 주문 생성 (실패 테스트)
+POST http://{{host}}/orders
+Content-Type: {{contentType}}
+
+{
+  "memberId": 999,
+  "productName": "테스트 상품",
+  "quantity": 1,
+  "unitPrice": 10000.00,
+  "orderMemo": "존재하지 않는 회원 테스트"
+}
+
+###
+
+### 5. 유효성 검사 실패 테스트 (음수 수량)
+POST http://{{host}}/orders
+Content-Type: {{contentType}}
+
+{
+  "memberId": 1,
+  "productName": "테스트 상품",
+  "quantity": -1,
+  "unitPrice": 10000.00,
+  "orderMemo": "음수 수량 테스트"
+}
+
+###
+
+### 6. 유효성 검사 실패 테스트 (빈 상품명)
+POST http://{{host}}/orders
+Content-Type: {{contentType}}
+
+{
+  "memberId": 1,
+  "productName": "",
+  "quantity": 1,
+  "unitPrice": 10000.00
+}
+
+###
+
+### 7. 모든 주문 조회
+GET http://{{host}}/orders/all
+
+###
+
+### 8. 페이징으로 주문 조회
+GET http://{{host}}/orders?page=0&size=5&sort=id,desc
+
+###
+
+### 9. ID로 주문 조회
+GET http://{{host}}/orders/1
+
+###
+
+### 10. 회원별 주문 조회 (OpenFeign 통신 테스트)
+GET http://{{host}}/orders/member/1
+
+###
+
+### 11. 회원별 주문 조회 (회원 ID 2번)
+GET http://{{host}}/orders/member/2
+
+###
+
+### 12. 상태별 주문 조회 - PENDING
+GET http://{{host}}/orders/status/PENDING
+
+###
+
+### 13. 상태별 주문 조회 - CONFIRMED  
+GET http://{{host}}/orders/status/CONFIRMED
+
+###
+
+### 14. 상태별 주문 조회 - DELIVERED
+GET http://{{host}}/orders/status/DELIVERED
+
+###
+
+### 15. 상품명으로 주문 검색
+GET http://{{host}}/orders/search?productName=노트북
+
+###
+
+### 16. 상품명으로 주문 검색 (키보드)
+GET http://{{host}}/orders/search?productName=키보드
+
+###
+
+### 17. 최근 주문 조회
+GET http://{{host}}/orders/recent
+
+###
+
+### 18. 기간별 주문 조회 (2024년)
+GET http://{{host}}/orders/period?startDate=2024-01-01T00:00:00&endDate=2024-12-31T23:59:59
+
+###
+
+### 19. 회원별 총 주문 금액 조회 (회원 ID 1번)
+GET http://{{host}}/orders/stats/total-amount/1
+
+###
+
+### 20. 회원별 총 주문 금액 조회 (회원 ID 2번)
+GET http://{{host}}/orders/stats/total-amount/2
+
+###
+
+### 21. 상태별 주문 수 조회 - PENDING
+GET http://{{host}}/orders/stats/count/PENDING
+
+###
+
+### 22. 상태별 주문 수 조회 - CONFIRMED
+GET http://{{host}}/orders/stats/count/CONFIRMED
+
+###
+
+### 23. 상태별 주문 수 조회 - DELIVERED
+GET http://{{host}}/orders/stats/count/DELIVERED
+
+###
+
+### 24. 주문 정보 수정 (수량 및 상태 변경)
+PUT http://{{host}}/orders/1
+Content-Type: {{contentType}}
+
+{
+  "quantity": 2,
+  "status": "CONFIRMED",
+  "orderMemo": "수량 변경 및 주문 확인 완료"
+}
+
+###
+
+### 25. 주문 정보 수정 (단가 변경)
+PUT http://{{host}}/orders/2
+Content-Type: {{contentType}}
+
+{
+  "unitPrice": 130000.00,
+  "status": "PROCESSING",
+  "orderMemo": "가격 조정 후 처리 중"
+}
+
+###
+
+### 26. 주문 상태만 변경
+PUT http://{{host}}/orders/3
+Content-Type: {{contentType}}
+
+{
+  "status": "SHIPPED"
+}
+
+###
+
+### 27. 존재하지 않는 주문 조회 (404 에러 테스트)
+GET http://{{host}}/orders/999
+
+###
+
+### 28. 존재하지 않는 주문 수정 (404 에러 테스트)
+PUT http://{{host}}/orders/999
+Content-Type: {{contentType}}
+
+{
+  "status": "CONFIRMED"
+}
+
+###
+
+### 29. 주문 삭제
+DELETE http://{{host}}/orders/8
+
+###
+
+### 30. 삭제된 주문 조회 시도 (404 에러 테스트)
+GET http://{{host}}/orders/8
+
+###
+
+### 31. 대량 주문 생성 테스트 1 (회원 ID 3번)
+POST http://{{host}}/orders
+Content-Type: {{contentType}}
+
+{
+  "memberId": 3,
+  "productName": "기계식 키보드",
+  "quantity": 1,
+  "unitPrice": 180000.00,
+  "orderMemo": "사무용 기계식 키보드"
+}
+
+###
+
+### 32. 대량 주문 생성 테스트 2 (회원 ID 4번)
+POST http://{{host}}/orders
+Content-Type: {{contentType}}
+
+{
+  "memberId": 4,
+  "productName": "4K 모니터",
+  "quantity": 2,
+  "unitPrice": 450000.00,
+  "orderMemo": "듀얼 모니터 구성용"
+}
+
+###
+
+### 33. 대량 주문 생성 테스트 3 (회원 ID 5번)
+POST http://{{host}}/orders
+Content-Type: {{contentType}}
+
+{
+  "memberId": 5,
+  "productName": "프린터",
+  "quantity": 1,
+  "unitPrice": 250000.00,
+  "orderMemo": "사무용 레이저 프린터"
+}
+
+###
+
+### 34. 업데이트된 주문 목록 전체 조회
+GET http://{{host}}/orders/all
+
+###
+
+### 35. OpenFeign 통신 장애 시뮬레이션 테스트
+### (Member Service가 중단된 상태에서 테스트)
+### Member Service를 종료한 후 아래 API를 호출해보세요
+# POST http://{{host}}/orders
+# Content-Type: {{contentType}}
+# 
+# {
+#   "memberId": 1,
+#   "productName": "Fallback 테스트 상품",
+#   "quantity": 1,
+#   "unitPrice": 10000.00,
+#   "orderMemo": "Member Service 장애 시 Fallback 테스트"
+# }
+
+###
+
+### 36. H2 Console 확인 (브라우저에서)
+### URL: http://localhost:8082/h2-console
+### JDBC URL: jdbc:h2:mem:orderdb
+### Username: sa
+### Password: (빈값)
+
+### 37. 전체 시스템 연동 테스트를 위한 순서
+### 1. Discovery Service 실행 (8761)
+### 2. Config Service 실행 (8888)
+### 3. Member Service 실행 (8081)
+### 4. Order Service 실행 (8082)
+### 5. Gateway Service 실행 (8080) - 선택사항
+
+### 38. Gateway를 통한 접근 테스트 (Gateway Service 실행 시)
+### GET http://localhost:8080/api/orders/health
+### GET http://localhost:8080/api/orders/all
+### POST http://localhost:8080/api/orders
+
+###
+
+### 39. 복합 시나리오 테스트 - 회원별 주문 패턴 분석
+### 회원 1번의 모든 정보 조회
+GET http://{{host}}/orders/member/1
+
+### 회원 1번의 총 주문 금액
+GET http://{{host}}/orders/stats/total-amount/1
+
+###
+
+### 40. 비즈니스 로직 테스트 - 주문 라이프사이클
+### 주문 생성 -> 확인 -> 처리 -> 배송 -> 완료
+POST http://{{host}}/orders
+Content-Type: {{contentType}}
+
+{
+  "memberId": 1,
+  "productName": "라이프사이클 테스트 상품",
+  "quantity": 1,
+  "unitPrice": 100000.00,
+  "orderMemo": "주문 라이프사이클 테스트"
+}
+
+### 생성된 주문 ID를 확인한 후 아래 단계별로 상태 변경
+### PUT http://{{host}}/orders/{ORDER_ID} - CONFIRMED
+### PUT http://{{host}}/orders/{ORDER_ID} - PROCESSING  
+### PUT http://{{host}}/orders/{ORDER_ID} - SHIPPED
+### PUT http://{{host}}/orders/{ORDER_ID} - DELIVERED
+
+###
+
+### 테스트 완료 후 확인사항:
+### 1. 모든 주문이 정상적으로 생성되었는지 확인
+### 2. Member Service와의 연동이 정상적으로 작동하는지 확인
+### 3. OpenFeign Fallback이 정상적으로 동작하는지 확인
+### 4. 다양한 에러 상황에서 적절한 HTTP 상태 코드가 반환되는지 확인
+### 5. H2 Console에서 데이터베이스 상태 확인
+
+###
+
+

@@ -1,0 +1,102 @@
+# API Gateway Service 전용 설정
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway-service
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        # Member Service 라우팅 - 정확한 매칭
+        - id: member-service-api-exact
+          uri: lb://member-service
+          predicates:
+            - Path=/api/members
+          filters:
+            - RewritePath=/api/members, /members
+            
+        # Member Service 라우팅 - 하위 경로 매칭
+        - id: member-service-api-sub
+          uri: lb://member-service
+          predicates:
+            - Path=/api/members/**
+          filters:
+            - RewritePath=/api/members/(?<path>.*), /members/$\{path}
+            
+        - id: member-service-direct
+          uri: lb://member-service
+          predicates:
+            - Path=/member-service/**
+          filters:
+            - RewritePath=/member-service/(?<path>.*), /$\{path}
+            
+        # Order Service 라우팅 - 정확한 매칭
+        - id: order-service-api-exact
+          uri: lb://order-service
+          predicates:
+            - Path=/api/orders
+          filters:
+            - RewritePath=/api/orders, /orders
+            
+        # Order Service 라우팅 - 하위 경로 매칭
+        - id: order-service-api-sub
+          uri: lb://order-service
+          predicates:
+            - Path=/api/orders/**
+          filters:
+            - RewritePath=/api/orders/(?<path>.*), /orders/$\{path}
+            
+        - id: order-service-direct
+          uri: lb://order-service
+          predicates:
+            - Path=/order-service/**
+          filters:
+            - RewritePath=/order-service/(?<path>.*), /$\{path}
+            
+      # 글로벌 CORS 설정
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origin-patterns: "*"
+            allowed-methods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowed-headers: "*"
+            allow-credentials: true
+
+# Circuit Breaker 설정
+resilience4j:
+  circuitbreaker:
+    instances:
+      member-service:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10000
+      order-service:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10000
+
+# Management endpoints 활성화
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,env,gateway
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    reactor.netty.http.client: DEBUG

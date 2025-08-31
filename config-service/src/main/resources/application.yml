@@ -1,0 +1,35 @@
+server:
+  port: 8888
+
+spring:
+  application:
+    name: config-service
+  cloud:
+    config:
+      server:
+        # 로컬 파일시스템에서 설정 파일을 읽어옴
+        native:
+          search-locations: classpath:/config-repo/
+        # Git 레포지토리 사용 시 (선택사항)
+        # git:
+        #   uri: https://github.com/your-username/config-repo
+        #   clone-on-start: true
+  profiles:
+    active: native
+
+logging:
+  level:
+    org.springframework.cloud.config: DEBUG
+  pattern:
+    console: "%clr(%d{yyyy-MM-dd HH:mm:ss}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,env,configprops
+  endpoint:
+    health:
+      show-details: always
+
+

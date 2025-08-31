@@ -1,0 +1,70 @@
+# Eureka를 사용하는 경우의 설정
+# java -Dspring.profiles.active=eureka -jar order-service.jar
+
+server:
+  port: 8082
+
+spring:
+  application:
+    name: order-service
+  
+  # H2 데이터베이스 설정
+  datasource:
+    url: jdbc:h2:mem:orderdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.H2Dialect
+    defer-datasource-initialization: true
+  
+  sql:
+    init:
+      mode: always
+
+# OpenFeign 설정 (Eureka 사용 시)
+feign:
+  client:
+    config:
+      default:
+        connect-timeout: 5000
+        read-timeout: 5000
+        logger-level: full
+      member-service:
+        connect-timeout: 5000
+        read-timeout: 5000
+        logger-level: full
+
+# Eureka 클라이언트 설정 활성화
+eureka:
+  client:
+    enabled: true
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 10
+    lease-expiration-duration-in-seconds: 30
+
+logging:
+  level:
+    com.example.order: DEBUG
+    com.example.order.client: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+

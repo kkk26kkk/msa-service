@@ -1,0 +1,9 @@
+rootProject.name = 'msa-service'
+
+include 'discovery-service'
+include 'config-service'
+include 'gateway-service'
+include 'member-service'
+include 'order-service'
+
+

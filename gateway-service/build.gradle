@@ -1,0 +1,23 @@
+plugins {
+    id 'org.springframework.boot'
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+    implementation 'org.springframework.cloud:spring-cloud-starter-gateway'
+    implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+    
+    // Config Server 클라이언트 지원
+    implementation 'org.springframework.cloud:spring-cloud-starter-config'
+    implementation 'org.springframework.cloud:spring-cloud-starter-bootstrap'
+    
+    // Circuit Breaker 지원
+    implementation 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-reactor-resilience4j'
+    
+    // Load Balancer 지원
+    implementation 'org.springframework.cloud:spring-cloud-starter-loadbalancer'
+    
+    // Lombok 지원
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+}

@@ -1,0 +1,49 @@
+# Order Service 전용 설정
+
+server:
+  port: 8082
+
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: jdbc:h2:mem:orderdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.H2Dialect
+    defer-datasource-initialization: true
+  sql:
+    init:
+      mode: always
+
+# Member Service URL 설정 (로컬 개발용)
+member-service:
+  url: http://localhost:8081
+
+# OpenFeign 설정
+feign:
+  client:
+    config:
+      member-service:
+        connect-timeout: 5000
+        read-timeout: 5000
+        logger-level: full
+
+logging:
+  level:
+    com.example.order: DEBUG
+    com.example.order.client: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE

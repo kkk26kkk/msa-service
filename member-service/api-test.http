@@ -1,0 +1,137 @@
+### Member Service API 테스트 스크립트
+### VS Code REST Client 또는 IntelliJ HTTP Client에서 사용 가능
+
+### 변수 설정
+@host = localhost:8081
+@contentType = application/json
+
+### 1. 헬스 체크
+GET http://{{host}}/members/health
+
+###
+
+### 2. 회원 생성
+POST http://{{host}}/members
+Content-Type: {{contentType}}
+
+{
+  "username": "testuser1",
+  "password": "password123",
+  "email": "testuser1@example.com",
+  "fullName": "테스트 사용자 1",
+  "phoneNumber": "010-1111-2222"
+}
+
+###
+
+### 3. 두 번째 회원 생성
+POST http://{{host}}/members
+Content-Type: {{contentType}}
+
+{
+  "username": "testuser2",
+  "password": "password123",
+  "email": "testuser2@example.com",
+  "fullName": "테스트 사용자 2",
+  "phoneNumber": "010-3333-4444"
+}
+
+###
+
+### 4. 중복 사용자명으로 회원 생성 (실패 테스트)
+POST http://{{host}}/members
+Content-Type: {{contentType}}
+
+{
+  "username": "testuser1",
+  "password": "password123",
+  "email": "different@example.com",
+  "fullName": "중복 테스트"
+}
+
+###
+
+### 5. 유효성 검사 실패 테스트 (짧은 사용자명)
+POST http://{{host}}/members
+Content-Type: {{contentType}}
+
+{
+  "username": "ab",
+  "password": "123",
+  "email": "invalid-email",
+  "fullName": "유효성 검사 실패"
+}
+
+###
+
+### 6. 모든 회원 조회
+GET http://{{host}}/members/all
+
+###
+
+### 7. 페이징으로 회원 조회
+GET http://{{host}}/members?page=0&size=5&sort=id,desc
+
+###
+
+### 8. ID로 회원 조회
+GET http://{{host}}/members/1
+
+###
+
+### 9. 사용자명으로 회원 조회
+GET http://{{host}}/members/username/admin
+
+###
+
+### 10. 상태별 회원 조회
+GET http://{{host}}/members/status/ACTIVE
+
+###
+
+### 11. 이름으로 회원 검색
+GET http://{{host}}/members/search?name=홍길동
+
+###
+
+### 12. 활성 회원 수 조회
+GET http://{{host}}/members/stats/active-count
+
+###
+
+### 13. 회원 정보 수정
+PUT http://{{host}}/members/1
+Content-Type: {{contentType}}
+
+{
+  "fullName": "수정된 관리자",
+  "phoneNumber": "010-9999-8888",
+  "status": "INACTIVE"
+}
+
+###
+
+### 14. 존재하지 않는 회원 조회 (404 에러 테스트)
+GET http://{{host}}/members/999
+
+###
+
+### 15. 회원 삭제
+DELETE http://{{host}}/members/2
+
+###
+
+### 16. 삭제된 회원 조회 시도 (404 에러 테스트)
+GET http://{{host}}/members/2
+
+###
+
+### 17. H2 Console 확인 (브라우저에서)
+### URL: http://localhost:8081/h2-console
+### JDBC URL: jdbc:h2:mem:memberdb
+### Username: sa
+### Password: (빈값)
+
+###
+
+

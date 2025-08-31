@@ -1,0 +1,40 @@
+server:
+  port: 8761
+
+spring:
+  application:
+    name: discovery-service
+
+eureka:
+  instance:
+    hostname: localhost
+    prefer-ip-address: false
+  client:
+    # Eureka 서버 자체는 클라이언트로 등록되지 않도록 설정
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  server:
+    # 개발 환경에서 빠른 응답을 위한 설정
+    enable-self-preservation: false
+    eviction-interval-timer-in-ms: 5000
+    
+logging:
+  level:
+    com.netflix.eureka: OFF
+    com.netflix.discovery: OFF
+    org.springframework.cloud.netflix.eureka: DEBUG
+  pattern:
+    console: "%clr(%d{yyyy-MM-dd HH:mm:ss}){faint} %clr(${LOG_LEVEL_PATTERN:-%5p}) %clr([%15.15t]){faint} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n${LOG_EXCEPTION_CONVERSION_WORD:-%wEx}"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,env
+  endpoint:
+    health:
+      show-details: always
+
+

@@ -1,0 +1,13 @@
+plugins {
+    id 'org.springframework.boot'
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.cloud:spring-cloud-config-server'
+    
+    // Git 레포지토리 지원을 위한 의존성
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+}
+
+

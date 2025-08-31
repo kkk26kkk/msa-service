@@ -1,0 +1,40 @@
+# 테스트 전용 설정
+spring:
+  application:
+    name: member-service-test
+  
+  # 테스트용 H2 데이터베이스 설정
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  h2:
+    console:
+      enabled: false  # 테스트에서는 비활성화
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false  # 테스트 로그 간소화
+    properties:
+      hibernate:
+        format_sql: false
+        dialect: org.hibernate.dialect.H2Dialect
+
+# 로깅 설정 (테스트용)
+logging:
+  level:
+    com.example.member: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.type: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# 유레카 비활성화 (테스트에서는 불필요)
+eureka:
+  client:
+    enabled: false
+
+
