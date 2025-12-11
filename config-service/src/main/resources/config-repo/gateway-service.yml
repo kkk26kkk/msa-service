@@ -8,6 +8,9 @@ spring:
     name: gateway-service
   cloud:
     gateway:
+      default-filters:
+        - RequestLogging
+        - AuthenticationFilter
       discovery:
         locator:
           enabled: true
@@ -20,6 +23,10 @@ spring:
             - Path=/api/members
           filters:
             - RewritePath=/api/members, /members
+            - name: CircuitBreaker
+              args:
+                name: member-service
+                fallbackUri: forward:/fallback/member-service
             
         # Member Service 라우팅 - 하위 경로 매칭
         - id: member-service-api-sub
@@ -28,6 +35,10 @@ spring:
             - Path=/api/members/**
           filters:
             - RewritePath=/api/members/(?<path>.*), /members/$\{path}
+            - name: CircuitBreaker
+              args:
+                name: member-service
+                fallbackUri: forward:/fallback/member-service
             
         - id: member-service-direct
           uri: lb://member-service
@@ -43,6 +54,10 @@ spring:
             - Path=/api/orders
           filters:
             - RewritePath=/api/orders, /orders
+            - name: CircuitBreaker
+              args:
+                name: order-service
+                fallbackUri: forward:/fallback/order-service
             
         # Order Service 라우팅 - 하위 경로 매칭
         - id: order-service-api-sub
@@ -51,6 +66,10 @@ spring:
             - Path=/api/orders/**
           filters:
             - RewritePath=/api/orders/(?<path>.*), /orders/$\{path}
+            - name: CircuitBreaker
+              args:
+                name: order-service
+                fallbackUri: forward:/fallback/order-service
             
         - id: order-service-direct
           uri: lb://order-service
@@ -59,6 +78,24 @@ spring:
           filters:
             - RewritePath=/order-service/(?<path>.*), /$\{path}
             
+        # Auth Service 라우팅 - 하위 경로 매칭
+        - id: auth-service-api
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/auth/**
+          filters:
+            - RewritePath=/api/auth/(?<path>.*), /auth/$\{path}
+            - name: CircuitBreaker
+              args:
+                name: auth-service
+                fallbackUri: forward:/fallback/auth-service
+        - id: auth-service-direct
+          uri: lb://auth-service
+          predicates:
+            - Path=/auth-service/**
+          filters:
+            - RewritePath=/auth-service/(?<path>.*), /$\{path}
+
       # 글로벌 CORS 설정
       globalcors:
         cors-configurations:
@@ -76,27 +113,55 @@ spring:
 # Circuit Breaker 설정
 resilience4j:
   circuitbreaker:
+    configs:
+      default:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
     instances:
       member-service:
-        sliding-window-size: 10
-        failure-rate-threshold: 50
-        wait-duration-in-open-state: 10000
+        baseConfig: default
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
       order-service:
-        sliding-window-size: 10
-        failure-rate-threshold: 50
-        wait-duration-in-open-state: 10000
+        baseConfig: default
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+      auth-service:
+        baseConfig: default
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
 
 # Management endpoints 활성화
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,env,gateway
+        include: health,info,env,gateway,circuitbreakers,circuitbreakerevents
   endpoint:
     health:
       show-details: always
+    circuitbreakers:
+      enabled: true
+    circuitbreakerevents:
+      enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
 
 logging:
   level:
     org.springframework.cloud.gateway: DEBUG
     reactor.netty.http.client: DEBUG
+    com.example.gateway.filter: DEBUG
+
+security:
+  jwt:
+    secret: change-me-please-change-me-please-32

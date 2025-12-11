@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -38,6 +39,7 @@ public class MemberController {
      * POST /members
      */
     @PostMapping
+    @PreAuthorize("hasRole(T(com.example.member.security.SecurityRoles).ADMIN)")
     public ResponseEntity<MemberDto.Response> createMember(@Valid @RequestBody MemberDto.CreateRequest request) {
         log.info("Creating member request received for username: {}", request.getUsername());
         
@@ -51,6 +53,7 @@ public class MemberController {
      * GET /members?page=0&size=10&sort=id,desc
      */
     @GetMapping
+    @PreAuthorize("hasAnyRole(T(com.example.member.security.SecurityRoles).ADMIN, T(com.example.member.security.SecurityRoles).USER)")
     public ResponseEntity<Page<MemberDto.Summary>> getMembers(
             @PageableDefault(size = 10, sort = "id") Pageable pageable) {
         log.debug("Get members request received with pagination: {}", pageable);
@@ -65,6 +68,7 @@ public class MemberController {
      * GET /members/all
      */
     @GetMapping("/all")
+    @PreAuthorize("hasAnyRole(T(com.example.member.security.SecurityRoles).ADMIN, T(com.example.member.security.SecurityRoles).USER)")
     public ResponseEntity<List<MemberDto.Summary>> getAllMembers() {
         log.debug("Get all members request received");
         
@@ -78,6 +82,7 @@ public class MemberController {
      * GET /members/{id}
      */
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole(T(com.example.member.security.SecurityRoles).ADMIN, T(com.example.member.security.SecurityRoles).USER)")
     public ResponseEntity<MemberDto.Response> getMemberById(@PathVariable Long id) {
         log.debug("Get member by ID request received: {}", id);
         
@@ -91,6 +96,7 @@ public class MemberController {
      * GET /members/username/{username}
      */
     @GetMapping("/username/{username}")
+    @PreAuthorize("hasAnyRole(T(com.example.member.security.SecurityRoles).ADMIN, T(com.example.member.security.SecurityRoles).USER)")
     public ResponseEntity<MemberDto.Response> getMemberByUsername(@PathVariable String username) {
         log.debug("Get member by username request received: {}", username);
         
@@ -104,6 +110,7 @@ public class MemberController {
      * GET /members/status/{status}
      */
     @GetMapping("/status/{status}")
+    @PreAuthorize("hasAnyRole(T(com.example.member.security.SecurityRoles).ADMIN, T(com.example.member.security.SecurityRoles).USER)")
     public ResponseEntity<List<MemberDto.Summary>> getMembersByStatus(@PathVariable Member.MemberStatus status) {
         log.debug("Get members by status request received: {}", status);
         
@@ -117,6 +124,7 @@ public class MemberController {
      * GET /members/search?name=홍길동
      */
     @GetMapping("/search")
+    @PreAuthorize("hasAnyRole(T(com.example.member.security.SecurityRoles).ADMIN, T(com.example.member.security.SecurityRoles).USER)")
     public ResponseEntity<List<MemberDto.Summary>> searchMembersByName(@RequestParam String name) {
         log.debug("Search members by name request received: {}", name);
         
@@ -130,6 +138,7 @@ public class MemberController {
      * PUT /members/{id}
      */
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole(T(com.example.member.security.SecurityRoles).ADMIN)")
     public ResponseEntity<MemberDto.Response> updateMember(
             @PathVariable Long id, 
             @Valid @RequestBody MemberDto.UpdateRequest request) {
@@ -145,6 +154,7 @@ public class MemberController {
      * DELETE /members/{id}
      */
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole(T(com.example.member.security.SecurityRoles).ADMIN)")
     public ResponseEntity<Map<String, String>> deleteMember(@PathVariable Long id) {
         log.info("Delete member request received for ID: {}", id);
         
@@ -163,6 +173,7 @@ public class MemberController {
      * GET /members/stats/active-count
      */
     @GetMapping("/stats/active-count")
+    @PreAuthorize("hasAnyRole(T(com.example.member.security.SecurityRoles).ADMIN, T(com.example.member.security.SecurityRoles).USER)")
     public ResponseEntity<Map<String, Long>> getActiveMemberCount() {
         log.debug("Get active member count request received");
         

@@ -62,6 +62,18 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         minimum-number-of-calls: 5
 
+# Management endpoints 활성화 (로컬 실행용)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,env,circuitbreakers
+  endpoint:
+    health:
+      show-details: always
+    circuitbreakers:
+      enabled: true
+
 # Eureka 활성화 (Gateway와 연동을 위해)
 eureka:
   client:

@@ -45,6 +45,19 @@ public class FallbackController {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
     }
 
+    @GetMapping("/fallback/auth-service")
+    public ResponseEntity<Map<String, Object>> authServiceFallback() {
+        log.warn("Auth Service fallback triggered - service is unavailable");
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("error", "Auth Service is currently unavailable");
+        response.put("message", "Please try again later");
+        response.put("timestamp", LocalDateTime.now());
+        response.put("service", "auth-service");
+        
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
+    }
+
     @GetMapping("/health")
     public ResponseEntity<Map<String, Object>> health() {
         log.debug("Gateway health check requested");

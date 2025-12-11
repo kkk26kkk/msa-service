@@ -1,5 +1,9 @@
 package com.example.order.exception;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -86,10 +90,16 @@ public class GlobalExceptionHandler {
 
     /**
      * Feign 클라이언트 에러 (Member Service 통신 실패)
+     * 
+     * 주의: @CircuitBreaker 어노테이션이 적용된 메서드에서는 Circuit Breaker가 먼저 처리하므로
+     * 이 핸들러는 Circuit Breaker가 처리하지 못한 경우에만 실행됩니다.
+     * 
+     * Circuit Breaker가 정상 작동하면 Fallback 메서드가 실행되어 예외가 발생하지 않으므로
+     * 이 핸들러는 실행되지 않습니다.
      */
     @ExceptionHandler(feign.FeignException.class)
     public ResponseEntity<ErrorResponse> handleFeignException(feign.FeignException ex) {
-        log.error("Member Service communication failed", ex);
+        log.error("Member Service communication failed (Circuit Breaker did not handle this)", ex);
 
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpStatus.SERVICE_UNAVAILABLE.value(),
@@ -123,38 +133,16 @@ public class GlobalExceptionHandler {
     /**
      * 에러 응답 DTO
      */
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class ErrorResponse {
         private int status;
         private String error;
         private String message;
         private Map<String, String> details;
         private LocalDateTime timestamp;
-
-        public ErrorResponse() {}
-
-        public ErrorResponse(int status, String error, String message, Map<String, String> details, LocalDateTime timestamp) {
-            this.status = status;
-            this.error = error;
-            this.message = message;
-            this.details = details;
-            this.timestamp = timestamp;
-        }
-
-        // Getter/Setter
-        public int getStatus() { return status; }
-        public void setStatus(int status) { this.status = status; }
-
-        public String getError() { return error; }
-        public void setError(String error) { this.error = error; }
-
-        public String getMessage() { return message; }
-        public void setMessage(String message) { this.message = message; }
-
-        public Map<String, String> getDetails() { return details; }
-        public void setDetails(Map<String, String> details) { this.details = details; }
-
-        public LocalDateTime getTimestamp() { return timestamp; }
-        public void setTimestamp(LocalDateTime timestamp) { this.timestamp = timestamp; }
     }
 }
 

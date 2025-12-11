@@ -38,3 +38,5 @@ eureka:
     enabled: false
 
 
+security:
+  enabled: false

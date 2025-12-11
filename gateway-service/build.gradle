@@ -16,7 +16,15 @@ dependencies {
     
     // Load Balancer 지원
     implementation 'org.springframework.cloud:spring-cloud-starter-loadbalancer'
-    
+
+    // Actuator 지원
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // JWT 지원
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
+
     // Lombok 지원
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

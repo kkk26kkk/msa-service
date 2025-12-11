@@ -13,21 +13,29 @@ Spring Boot 기반의 마이크로서비스 아키텍처(MSA) 프로젝트입니
 │                  │   Load Balancing        │                    │
 │                  │   CORS Configuration    │                    │
 │                  └─────────────────────────┘                    │
-└─────────────────────┬─────────────────┬─────────────────────────┘
-                      │                 │
-       ┌──────────────▼──────────────┐  │
-       │     Member Service (8081)   │  │
-       │   - 회원 관리 CRUD          │  │
-       │   - Spring Data JPA        │  │
-       │   - H2 Database            │  │
-       └─────────────────────────────┘  │
-                                        │
+└─────────────────────┬─────────────────┬──────────┬──────────────┘
+                      │                 │          │
+       ┌──────────────▼──────────────┐  │          │
+       │     Member Service (8081)   │  │          │
+       │   - 회원 관리 CRUD          │  │          │
+       │   - Spring Data JPA        │  │          │
+       │   - H2 Database            │  │          │
+       └─────────────────────────────┘  │          │
+                                        │          │
                         ┌───────────────▼──────────────┐
                         │     Order Service (8082)     │
                         │   - 주문 관리 CRUD           │
                         │   - OpenFeign Client         │
                         │   - Circuit Breaker          │
                         │   - Member Service 연동      │
+                        └──────────────────────────────┘
+                                        │
+                        ┌───────────────▼──────────────┐
+                        │     Auth Service (8083)      │
+                        │   - JWT 인증/인가           │
+                        │   - Spring Security          │
+                        │   - 사용자 로그인/회원가입   │
+                        │   - 역할 기반 권한 관리      │
                         └──────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────┐
@@ -61,13 +69,14 @@ Spring Boot 기반의 마이크로서비스 아키텍처(MSA) 프로젝트입니
 
 ### 3. **Gateway Service** (Port: 8080)
 - **역할**: API 게이트웨이 및 라우팅
-- **기술 스택**: Spring Cloud Gateway
+- **기술 스택**: Spring Cloud Gateway, Resilience4j
 - **핵심 기능**:
   - 단일 진입점을 통한 API 라우팅
   - 로드 밸런싱 및 서비스 디스커버리 연동
-  - Circuit Breaker를 통한 장애 허용성
+  - Circuit Breaker 필터를 통한 장애 허용성 (Member, Order, Auth Service)
+  - JWT 기반 인증 및 인가 필터
   - CORS 설정 및 보안 정책 적용
-  - 요청/응답 로깅 및 모니터링
+  - 요청/응답 로깅 및 모니터링 (클라이언트 IP 추출 포함)
 
 ### 4. **Member Service** (Port: 8081)
 - **역할**: 회원 관리 서비스
@@ -85,9 +94,21 @@ Spring Boot 기반의 마이크로서비스 아키텍처(MSA) 프로젝트입니
 - **핵심 기능**:
   - 주문 정보 CRUD 작업
   - OpenFeign을 통한 Member Service 연동
-  - Circuit Breaker를 통한 장애 허용성
+  - Resilience4j `@CircuitBreaker` 어노테이션을 통한 Circuit Breaker 패턴 적용
+  - `MemberIntegrationService`를 통한 서비스 간 통신 및 Fallback 처리
   - 주문 상태 관리 (PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED)
-  - Fallback 메커니즘을 통한 서비스 장애 대응
+  - Fallback 메커니즘을 통한 서비스 장애 대응 (실패율 임계값: 50%)
+
+### 6. **Auth Service** (Port: 8083)
+- **역할**: 인증 및 권한 관리 서비스
+- **기술 스택**: Spring Boot, Spring Security, JWT, Spring Data JPA, H2 Database
+- **핵심 기능**:
+  - JWT 기반 인증 및 인가
+  - 사용자 로그인 및 토큰 발급
+  - 사용자 회원가입 및 관리
+  - BCryptPasswordEncoder를 통한 비밀번호 암호화
+  - 역할 기반 권한 관리 (ADMIN, USER)
+  - Spring Security를 통한 보안 설정
 
 ## 🚀 기술 스택
 
@@ -100,6 +121,11 @@ Spring Boot 기반의 마이크로서비스 아키텍처(MSA) 프로젝트입니
 - **Netflix Eureka** - 서비스 디스커버리
 - **Spring Cloud Config** - 설정 관리
 - **Spring Cloud Gateway** - API 게이트웨이
+
+### Security
+- **Spring Security** - 인증 및 인가 프레임워크
+- **JWT (JSON Web Token)** - 토큰 기반 인증
+- **BCryptPasswordEncoder** - 비밀번호 암호화
 
 ### Communication
 - **OpenFeign** - 선언적 REST 클라이언트
@@ -146,6 +172,11 @@ Spring Boot 기반의 마이크로서비스 아키텍처(MSA) 프로젝트입니
    ```bash
    ./gradlew order-service:bootRun
    ```
+   
+6. **Auth Service**
+   ```bash
+   ./gradlew auth-service:bootRun
+   ```
 
 ### 3. 서비스 확인
 - Discovery Service: http://localhost:8761
@@ -153,6 +184,7 @@ Spring Boot 기반의 마이크로서비스 아키텍처(MSA) 프로젝트입니
 - Gateway Service: http://localhost:8080
 - Member Service: http://localhost:8081
 - Order Service: http://localhost:8082
+- Auth Service: http://localhost:8083
 
 ## 📡 API 엔드포인트
 
@@ -170,9 +202,23 @@ Spring Boot 기반의 마이크로서비스 아키텍처(MSA) 프로젝트입니
 - `PUT /api/orders/{id}` - 주문 정보 수정
 - `DELETE /api/orders/{id}` - 주문 삭제
 
+### Auth Service (via Gateway)
+- `POST /api/auth/login` - 사용자 로그인 및 JWT 토큰 발급
+- `GET /api/auth/health` - 서비스 상태 확인
+
+### Auth Service (직접 접근)
+- `POST /auth/login` - 사용자 로그인 및 JWT 토큰 발급
+- `GET /auth/health` - 서비스 상태 확인
+
 ### 테스트 엔드포인트 (Order Service 직접 접근)
 - `GET /test/member/{id}` - Member Service 연동 테스트
 - `GET /test/circuit-breaker/status` - Circuit Breaker 상태 확인
+
+### 모니터링 엔드포인트
+- `GET /actuator/health` - 서비스 상태 확인 (모든 서비스)
+- `GET /actuator/circuitbreakers` - Circuit Breaker 상태 (Order Service, Gateway Service)
+- `GET /actuator/circuitbreakerevents/{name}` - Circuit Breaker 이벤트 (Order Service, Gateway Service)
+- `GET /actuator/gateway/routes` - Gateway 라우팅 규칙 (Gateway Service만)
 
 ## 🔄 서비스 간 통신
 
@@ -182,8 +228,9 @@ Order Service는 OpenFeign을 사용하여 Member Service와 통신합니다:
 ```java
 @FeignClient(
     name = "member-service",
-    url = "${member-service.url:http://localhost:8081}",
-    fallback = MemberServiceClientFallback.class
+    url = "${member-service.url:http://localhost:8081}"
+    // 주의: OpenFeign Fallback을 사용하지 않습니다.
+    // 대신 Resilience4j의 @CircuitBreaker 어노테이션을 Service 레벨에서 사용합니다.
 )
 public interface MemberServiceClient {
     @GetMapping("/members/{id}")
@@ -192,8 +239,33 @@ public interface MemberServiceClient {
 ```
 
 ### Circuit Breaker 및 Fallback
-서비스 장애 시 자동으로 Fallback 메커니즘이 동작합니다:
-- Member Service 장애 시 "알 수 없는 사용자"로 처리
+Resilience4j의 `@CircuitBreaker` 어노테이션을 사용하여 Circuit Breaker 패턴을 적용합니다:
+
+```java
+@Service
+public class MemberIntegrationService {
+    @CircuitBreaker(name = "member-service", fallbackMethod = "validateMemberFallback")
+    public MemberDto validateMember(Long memberId) {
+        return memberServiceClient.getMemberById(memberId);
+    }
+    
+    public MemberDto validateMemberFallback(Long memberId, Exception e) {
+        // Fallback 처리: "알 수 없는 사용자" 반환
+        return new MemberDto(/* fallback data */);
+    }
+}
+```
+
+**Circuit Breaker 설정**:
+- 실패율 임계값: 50% (50% 이상 실패 시 OPEN 상태로 전환)
+- 슬라이딩 윈도우 크기: 10
+- 최소 호출 횟수: 5
+- OPEN 상태 유지 시간: 10초
+
+**Fallback 동작**:
+- Member Service 장애 시 자동으로 Fallback 메서드 실행
+- "알 수 없는 사용자"로 처리하여 주문 처리를 계속 진행
+- Circuit Breaker가 실패를 올바르게 카운트하여 메트릭 수집
 - 서비스 복구 시 자동으로 정상 통신 재개
 
 ## 🏥 모니터링 및 관리
@@ -202,6 +274,8 @@ public interface MemberServiceClient {
 각 서비스는 Spring Boot Actuator를 통한 모니터링 기능을 제공합니다:
 - Health Check: `/actuator/health`
 - Gateway Routes: `/actuator/gateway/routes` (Gateway Service만)
+- Circuit Breaker 상태: `/actuator/circuitbreakers` (Order Service, Gateway Service)
+- Circuit Breaker 이벤트: `/actuator/circuitbreakerevents/{name}` (Order Service, Gateway Service)
 
 ### Eureka Dashboard
 서비스 등록 상태는 Eureka Dashboard에서 확인할 수 있습니다:
@@ -217,6 +291,7 @@ msa-service/
 ├── gateway-service/            # API Gateway
 ├── member-service/             # 회원 관리 서비스
 ├── order-service/              # 주문 관리 서비스
+├── auth-service/               # 인증 및 권한 관리 서비스
 ├── build.gradle               # 루트 빌드 스크립트
 ├── settings.gradle            # 멀티 모듈 설정
 └── README.md                  # 프로젝트 문서

@@ -33,3 +33,18 @@ logging:
     com.example.member: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+
+# Management endpoints 활성화
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,env
+  endpoint:
+    health:
+      show-details: always
+
+security:
+  enabled: true
+  jwt:
+    secret: change-me-please-change-me-please-32

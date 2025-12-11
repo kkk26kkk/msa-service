@@ -12,6 +12,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -41,6 +42,7 @@ public class OrderController {
      * POST /orders
      */
     @PostMapping
+    @PreAuthorize("hasRole(T(com.example.order.security.SecurityRoles).ADMIN)")
     public ResponseEntity<OrderDto.Response> createOrder(@Valid @RequestBody OrderDto.CreateRequest request) {
         log.info("Creating order request received for member: {}", request.getMemberId());
         
@@ -54,6 +56,7 @@ public class OrderController {
      * GET /orders?page=0&size=10&sort=id,desc
      */
     @GetMapping
+    @PreAuthorize("hasAnyRole(T(com.example.order.security.SecurityRoles).ADMIN, T(com.example.order.security.SecurityRoles).USER)")
     public ResponseEntity<Page<OrderDto.Summary>> getOrders(
             @PageableDefault(size = 10, sort = "id") Pageable pageable) {
         log.debug("Get orders request received with pagination: {}", pageable);
@@ -68,6 +71,7 @@ public class OrderController {
      * GET /orders/all
      */
     @GetMapping("/all")
+    @PreAuthorize("hasAnyRole(T(com.example.order.security.SecurityRoles).ADMIN, T(com.example.order.security.SecurityRoles).USER)")
     public ResponseEntity<List<OrderDto.Summary>> getAllOrders() {
         log.debug("Get all orders request received");
         
@@ -81,6 +85,7 @@ public class OrderController {
      * GET /orders/{id}
      */
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole(T(com.example.order.security.SecurityRoles).ADMIN, T(com.example.order.security.SecurityRoles).USER)")
     public ResponseEntity<OrderDto.Response> getOrderById(@PathVariable Long id) {
         log.debug("Get order by ID request received: {}", id);
         
@@ -94,6 +99,7 @@ public class OrderController {
      * GET /orders/member/{memberId}
      */
     @GetMapping("/member/{memberId}")
+    @PreAuthorize("hasAnyRole(T(com.example.order.security.SecurityRoles).ADMIN, T(com.example.order.security.SecurityRoles).USER)")
     public ResponseEntity<List<OrderDto.Summary>> getOrdersByMemberId(@PathVariable Long memberId) {
         log.debug("Get orders by member ID request received: {}", memberId);
         
@@ -107,6 +113,7 @@ public class OrderController {
      * GET /orders/status/{status}
      */
     @GetMapping("/status/{status}")
+    @PreAuthorize("hasAnyRole(T(com.example.order.security.SecurityRoles).ADMIN, T(com.example.order.security.SecurityRoles).USER)")
     public ResponseEntity<List<OrderDto.Summary>> getOrdersByStatus(@PathVariable Order.OrderStatus status) {
         log.debug("Get orders by status request received: {}", status);
         
@@ -120,6 +127,7 @@ public class OrderController {
      * GET /orders/search?productName=상품명
      */
     @GetMapping("/search")
+    @PreAuthorize("hasAnyRole(T(com.example.order.security.SecurityRoles).ADMIN, T(com.example.order.security.SecurityRoles).USER)")
     public ResponseEntity<List<OrderDto.Summary>> searchOrdersByProductName(@RequestParam String productName) {
         log.debug("Search orders by product name request received: {}", productName);
         
@@ -133,6 +141,7 @@ public class OrderController {
      * GET /orders/period?startDate=2024-01-01T00:00:00&endDate=2024-12-31T23:59:59
      */
     @GetMapping("/period")
+    @PreAuthorize("hasAnyRole(T(com.example.order.security.SecurityRoles).ADMIN, T(com.example.order.security.SecurityRoles).USER)")
     public ResponseEntity<List<OrderDto.Summary>> getOrdersByDateRange(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
@@ -148,6 +157,7 @@ public class OrderController {
      * GET /orders/recent
      */
     @GetMapping("/recent")
+    @PreAuthorize("hasAnyRole(T(com.example.order.security.SecurityRoles).ADMIN, T(com.example.order.security.SecurityRoles).USER)")
     public ResponseEntity<List<OrderDto.Summary>> getRecentOrders() {
         log.debug("Get recent orders request received");
         
@@ -161,6 +171,7 @@ public class OrderController {
      * PUT /orders/{id}
      */
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole(T(com.example.order.security.SecurityRoles).ADMIN)")
     public ResponseEntity<OrderDto.Response> updateOrder(
             @PathVariable Long id, 
             @Valid @RequestBody OrderDto.UpdateRequest request) {
@@ -176,6 +187,7 @@ public class OrderController {
      * DELETE /orders/{id}
      */
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole(T(com.example.order.security.SecurityRoles).ADMIN)")
     public ResponseEntity<Map<String, String>> deleteOrder(@PathVariable Long id) {
         log.info("Delete order request received for ID: {}", id);
         
@@ -194,6 +206,7 @@ public class OrderController {
      * GET /orders/stats/total-amount/{memberId}
      */
     @GetMapping("/stats/total-amount/{memberId}")
+    @PreAuthorize("hasAnyRole(T(com.example.order.security.SecurityRoles).ADMIN, T(com.example.order.security.SecurityRoles).USER)")
     public ResponseEntity<Map<String, Object>> getTotalAmountByMemberId(@PathVariable Long memberId) {
         log.debug("Get total amount by member ID request received: {}", memberId);
         
@@ -211,6 +224,7 @@ public class OrderController {
      * GET /orders/stats/count/{status}
      */
     @GetMapping("/stats/count/{status}")
+    @PreAuthorize("hasAnyRole(T(com.example.order.security.SecurityRoles).ADMIN, T(com.example.order.security.SecurityRoles).USER)")
     public ResponseEntity<Map<String, Object>> getOrderCountByStatus(@PathVariable Order.OrderStatus status) {
         log.debug("Get order count by status request received: {}", status);
         
