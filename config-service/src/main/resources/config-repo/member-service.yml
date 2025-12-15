@@ -33,6 +33,18 @@ logging:
     com.example.member: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.cache: DEBUG
+
+# 캐시 설정
+spring:
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=1000,expireAfterWrite=5m
+    cache-names:
+      - members
+      - memberByUsername
+      - activeMemberCount
 
 # Management endpoints 활성화
 management:

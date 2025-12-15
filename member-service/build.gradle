@@ -15,6 +15,10 @@ dependencies {
     // Actuator 지원
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     
+    // Caffeine Cache (로컬 캐시)
+    implementation 'com.github.ben-manes.caffeine:caffeine'
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+    
     // H2 데이터베이스
     runtimeOnly 'com.h2database:h2'
     

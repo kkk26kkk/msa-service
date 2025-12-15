@@ -22,11 +22,29 @@ spring:
       hibernate:
         format_sql: false
         dialect: org.hibernate.dialect.H2Dialect
+  
+  # 캐시 설정 (테스트용)
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=1000,expireAfterWrite=5m
+    cache-names:
+      - members
+      - memberByUsername
+      - activeMemberCount
+  
+  # Config Server 비활성화 (테스트에서는 불필요)
+  cloud:
+    config:
+      enabled: false
+      fail-fast: false
 
 # 로깅 설정 (테스트용)
 logging:
   level:
-    com.example.member: INFO
+    com.example.member: DEBUG  # 캐시 동작 확인을 위해 DEBUG 레벨로 설정
+    com.example.member.service.MemberService: DEBUG  # MemberService 로그 확인
+    org.springframework.cache: DEBUG  # Spring Cache 로그 확인
     org.hibernate.SQL: WARN
     org.hibernate.type: WARN
   pattern:
@@ -36,7 +54,6 @@ logging:
 eureka:
   client:
     enabled: false
-
 
 security:
   enabled: false

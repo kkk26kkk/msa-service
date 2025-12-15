@@ -324,5 +324,6 @@ API 테스트 파일들이 제공됩니다:
 ## 📚 추가 문서
 
 - [FULL-SYSTEM-TEST.md](FULL-SYSTEM-TEST.md) - 전체 시스템 테스트 가이드
+- [SERVICE-ENHANCEMENT-PLAN.md](SERVICE-ENHANCEMENT-PLAN.md) - 서비스 심화 계획서 (캐싱, 재시도, Rate Limiting, 리프레시 토큰, 이벤트 기반 아키텍처, 모니터링)
 - [order-service/fallback-test-guide.md](order-service/fallback-test-guide.md) - Fallback 테스트 가이드
 - [order-service/test-scenarios.md](order-service/test-scenarios.md) - 테스트 시나리오

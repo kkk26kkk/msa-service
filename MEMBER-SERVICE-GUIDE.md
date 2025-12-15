@@ -28,12 +28,15 @@
 - 상태별 회원 조회 (ACTIVE, INACTIVE, SUSPENDED)
 - 이름으로 회원 검색
 - JWT 토큰 기반 인증 및 역할 기반 권한 관리
+- **Caffeine Cache를 활용한 캐싱 전략** (성능 최적화)
 
 ### 1.2 기술 스택
 
 - **Spring Boot**: 웹 애플리케이션 프레임워크
 - **Spring Data JPA**: 데이터베이스 접근
 - **Spring Security**: JWT 토큰 기반 인증
+- **Spring Cache**: 캐싱 추상화
+- **Caffeine Cache**: 고성능 로컬 캐시
 - **H2 Database**: 인메모리 데이터베이스 (개발용)
 - **Bean Validation**: 데이터 검증
 - **Lombok**: 보일러플레이트 코드 감소
@@ -55,7 +58,8 @@ member-service/
 ├── src/main/java/com/example/member/
 │   ├── MemberServiceApplication.java      # 애플리케이션 진입점
 │   ├── config/
-│   │   └── SecurityConfig.java          # Spring Security 설정
+│   │   ├── SecurityConfig.java          # Spring Security 설정
+│   │   └── CacheConfig.java             # 캐시 설정
 │   ├── controller/
 │   │   └── MemberController.java        # REST API 엔드포인트
 │   ├── dto/
@@ -699,7 +703,351 @@ public class GlobalExceptionHandler {
 
 ---
 
-## 7. 실습 가이드
+## 7. 캐싱 전략
+
+### 7.1 캐싱 개요
+
+Member Service는 **Caffeine Cache**를 활용하여 회원 조회 성능을 최적화합니다.
+
+**캐싱 대상**:
+- ID로 회원 조회 (`getMemberById`)
+- 사용자명으로 회원 조회 (`getMemberByUsername`)
+- 활성 회원 수 조회 (`getActiveMemberCount`)
+
+**캐시 전략**: Cache-Aside 패턴
+- 읽기: 캐시에 데이터가 있으면 캐시에서 반환, 없으면 DB 조회 후 캐시 저장
+- 쓰기: 데이터 수정/삭제 시 관련 캐시 무효화
+
+### 7.2 캐시 설정
+
+#### CacheConfig
+
+```java
+@Configuration
+@EnableCaching
+public class CacheConfig {
+
+    @Bean
+    public CacheManager cacheManager() {
+        CaffeineCacheManager cacheManager = new CaffeineCacheManager(
+            "members",           // 회원 정보 캐시
+            "memberByUsername",  // 사용자명으로 조회한 회원 캐시
+            "activeMemberCount"  // 활성 회원 수 캐시
+        );
+        
+        cacheManager.setCaffeine(Caffeine.newBuilder()
+            .maximumSize(1000)                    // 최대 캐시 크기: 1000개
+            .expireAfterWrite(5, TimeUnit.MINUTES) // TTL: 5분
+            .recordStats()                        // 캐시 통계 수집
+        );
+        
+        return cacheManager;
+    }
+}
+```
+
+**캐시 설정**:
+- **최대 크기**: 1000개
+- **TTL (Time To Live)**: 5분
+- **통계 수집**: 활성화 (성능 모니터링용)
+
+#### application.yml 설정
+
+```yaml
+spring:
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=1000,expireAfterWrite=5m
+    cache-names:
+      - members
+      - memberByUsername
+      - activeMemberCount
+
+logging:
+  level:
+    org.springframework.cache: DEBUG  # 캐시 동작 로그 확인
+```
+
+### 7.3 캐시 적용
+
+#### @Cacheable - 조회 메서드
+
+```java
+/**
+ * ID로 회원 조회
+ * 
+ * 캐시 키: 회원 ID
+ * 캐시 이름: "members"
+ */
+@Cacheable(value = "members", key = "#id", unless = "#result == null")
+public MemberDto.Response getMemberById(Long id) {
+    log.debug("Retrieving member by ID: {} (cache miss)", id);
+    
+    Member member = memberRepository.findById(id)
+            .orElseThrow(() -> new MemberNotFoundException("회원을 찾을 수 없습니다. ID: " + id));
+    
+    return MemberDto.Response.from(member);
+}
+
+/**
+ * 사용자명으로 회원 조회
+ * 
+ * 캐시 키: 사용자명
+ * 캐시 이름: "memberByUsername"
+ */
+@Cacheable(value = "memberByUsername", key = "#username", unless = "#result == null")
+public MemberDto.Response getMemberByUsername(String username) {
+    log.debug("Retrieving member by username: {} (cache miss)", username);
+    
+    Member member = memberRepository.findByUsername(username)
+            .orElseThrow(() -> new MemberNotFoundException("회원을 찾을 수 없습니다. Username: " + username));
+    
+    return MemberDto.Response.from(member);
+}
+
+/**
+ * 활성 회원 수 조회
+ * 
+ * 캐시 키: 없음 (단일 값)
+ * 캐시 이름: "activeMemberCount"
+ */
+@Cacheable(value = "activeMemberCount", unless = "#result == null")
+public long getActiveMemberCount() {
+    log.debug("Retrieving active member count (cache miss)");
+    return memberRepository.countActiveMembers();
+}
+```
+
+**@Cacheable 속성**:
+- `value`: 캐시 이름
+- `key`: 캐시 키 (SpEL 표현식 사용)
+- `unless`: 캐시 저장 조건 (`#result == null`이면 캐시 저장 안 함)
+
+### 7.4 캐시 무효화
+
+#### @CacheEvict - 수정/삭제 메서드
+
+```java
+/**
+ * 회원 생성
+ * 
+ * 새 회원 생성 시 활성 회원 수 캐시를 무효화합니다.
+ */
+@Transactional
+@CacheEvict(value = "activeMemberCount", allEntries = true)
+public MemberDto.Response createMember(MemberDto.CreateRequest request) {
+    // ... 회원 생성 로직
+}
+
+/**
+ * 회원 정보 수정
+ * 
+ * 회원 정보 수정 시 관련 캐시를 무효화합니다.
+ */
+@Transactional
+public MemberDto.Response updateMember(Long id, MemberDto.UpdateRequest request) {
+    Member member = memberRepository.findById(id)
+            .orElseThrow(() -> new MemberNotFoundException("회원을 찾을 수 없습니다. ID: " + id));
+    
+    String username = member.getUsername();
+    boolean statusChanged = request.getStatus() != null && 
+                           !request.getStatus().equals(member.getStatus());
+    
+    // 수정 로직...
+    
+    // 캐시 무효화
+    evictMemberCaches(id, username);
+    if (statusChanged) {
+        evictActiveMemberCountCache();
+    }
+    
+    return MemberDto.Response.from(updatedMember);
+}
+
+/**
+ * 회원 캐시 무효화 (내부 메서드)
+ */
+private void evictMemberCaches(Long id, String username) {
+    var membersCache = cacheManager.getCache("members");
+    if (membersCache != null) {
+        membersCache.evict(id);
+    }
+    
+    var usernameCache = cacheManager.getCache("memberByUsername");
+    if (usernameCache != null) {
+        usernameCache.evict(username);
+    }
+}
+
+/**
+ * 회원 삭제
+ * 
+ * 회원 삭제 시 관련 캐시를 무효화합니다.
+ */
+@Transactional
+public void deleteMember(Long id) {
+    // 삭제 전 회원 정보 조회 (캐시 무효화용)
+    Member member = memberRepository.findById(id)
+            .orElseThrow(() -> new MemberNotFoundException("회원을 찾을 수 없습니다. ID: " + id));
+    
+    String username = member.getUsername();
+    
+    memberRepository.deleteById(id);
+    
+    // 캐시 무효화
+    evictMemberCaches(id, username);
+    evictActiveMemberCountCache();
+}
+```
+
+**@CacheEvict 속성**:
+- `value`: 캐시 이름
+- `key`: 무효화할 캐시 키
+- `allEntries`: 전체 캐시 무효화 여부
+
+### 7.5 캐시 동작 흐름
+
+#### 읽기 (Cache-Aside)
+
+```
+1. 클라이언트 요청: GET /members/1
+   ↓
+2. @Cacheable 어노테이션 확인
+   ↓
+3. 캐시에 데이터가 있는가?
+   ├─ 있음 → 캐시에서 반환 (캐시 히트)
+   └─ 없음 → DB 조회 → 캐시 저장 → 반환 (캐시 미스)
+```
+
+#### 쓰기 (Cache Invalidation)
+
+```
+1. 클라이언트 요청: PUT /members/1
+   ↓
+2. 회원 정보 수정
+   ↓
+3. 관련 캐시 무효화
+   - ID로 조회한 캐시
+   - 사용자명으로 조회한 캐시
+   - 활성 회원 수 캐시 (상태 변경 시)
+   ↓
+4. 다음 조회 시 캐시 미스 → DB 조회 → 캐시 저장
+```
+
+### 7.6 캐시 테스트
+
+#### 통합 테스트
+
+```java
+@SpringBootTest
+@ActiveProfiles("test")
+@Transactional
+class MemberServiceCacheTest {
+
+    @Autowired
+    private MemberService memberService;
+
+    @Autowired
+    private CacheManager cacheManager;
+
+    @Test
+    @DisplayName("ID로 회원 조회 - 캐시 히트 확인")
+    void getMemberById_CacheHit() {
+        Long memberId = 1L;
+        
+        // 첫 번째 조회 (캐시 미스)
+        MemberDto.Response firstResult = memberService.getMemberById(memberId);
+        
+        // 캐시 확인
+        var cache = cacheManager.getCache("members");
+        assertThat(cache.get(memberId)).isNotNull();
+        
+        // 두 번째 조회 (캐시 히트)
+        MemberDto.Response secondResult = memberService.getMemberById(memberId);
+        assertThat(secondResult.getId()).isEqualTo(firstResult.getId());
+    }
+
+    @Test
+    @DisplayName("회원 수정 시 캐시 무효화 확인")
+    void updateMember_CacheEviction() {
+        Long memberId = 1L;
+        
+        // 캐시에 데이터 저장
+        memberService.getMemberById(memberId);
+        
+        // 캐시에 데이터가 있는지 확인
+        var cache = cacheManager.getCache("members");
+        assertThat(cache.get(memberId)).isNotNull();
+        
+        // 회원 정보 수정
+        MemberDto.UpdateRequest updateRequest = MemberDto.UpdateRequest.builder()
+                .fullName("수정된 이름")
+                .build();
+        memberService.updateMember(memberId, updateRequest);
+        
+        // 캐시가 무효화되었는지 확인
+        assertThat(cache.get(memberId)).isNull();
+    }
+}
+```
+
+### 7.7 성능 개선 효과
+
+**캐싱 적용 전**:
+- 모든 조회 요청이 DB에 접근
+- DB 부하 증가
+- 응답 시간: ~10-50ms (DB 조회 시간)
+
+**캐싱 적용 후**:
+- 캐시 히트 시 DB 접근 없음
+- DB 부하 감소
+- 응답 시간: ~1-5ms (메모리 접근 시간)
+
+**예상 성능 개선**: **50-90% 응답 시간 단축** (캐시 히트율에 따라 다름)
+
+### 7.8 캐시 모니터링
+
+#### 캐시 통계 확인
+
+Caffeine Cache는 `recordStats()`를 통해 통계를 수집합니다:
+
+```java
+// CacheManager에서 캐시 통계 조회
+CaffeineCache cache = (CaffeineCache) cacheManager.getCache("members");
+CacheStats stats = cache.getNativeCache().stats();
+
+System.out.println("Hit Count: " + stats.hitCount());
+System.out.println("Miss Count: " + stats.missCount());
+System.out.println("Hit Rate: " + stats.hitRate());
+```
+
+**주요 통계**:
+- `hitCount`: 캐시 히트 횟수
+- `missCount`: 캐시 미스 횟수
+- `hitRate`: 캐시 히트율 (0.0 ~ 1.0)
+
+### 7.9 캐시 전략 고려사항
+
+**캐싱이 적합한 경우**:
+- ✅ 자주 조회되는 데이터
+- ✅ 변경 빈도가 낮은 데이터
+- ✅ 조회 비용이 높은 데이터 (DB 쿼리, 외부 API 호출)
+
+**캐싱이 부적합한 경우**:
+- ❌ 실시간성이 중요한 데이터
+- ❌ 변경 빈도가 매우 높은 데이터
+- ❌ 메모리 제약이 있는 환경
+
+**현재 적용 범위**:
+- ✅ ID/사용자명으로 회원 조회 (자주 조회, 변경 빈도 낮음)
+- ✅ 활성 회원 수 (통계 정보, 변경 빈도 낮음)
+- ❌ 회원 목록 조회 (페이징, 동적 쿼리 → 캐싱 부적합)
+- ❌ 이름으로 검색 (동적 쿼리 → 캐싱 부적합)
+
+---
+
+## 8. 실습 가이드
 
 ### 7.1 Member Service 실행
 
@@ -856,7 +1204,7 @@ curl -X POST http://localhost:8081/members \
 
 ---
 
-## 8. 핵심 개념 정리
+## 9. 핵심 개념 정리
 
 ### 8.1 Spring Data JPA
 
@@ -886,7 +1234,7 @@ curl -X POST http://localhost:8081/members \
 
 ---
 
-## 9. 다음 단계
+## 10. 다음 단계
 
 Member Service를 이해했다면, 다음 단계로 진행하세요:
 
@@ -895,7 +1243,7 @@ Member Service를 이해했다면, 다음 단계로 진행하세요:
 
 ---
 
-## 10. 실습 체크리스트
+## 11. 실습 체크리스트
 
 - [ ] Member Service 실행
 - [ ] Auth Service에서 JWT 토큰 발급
@@ -908,3 +1256,6 @@ Member Service를 이해했다면, 다음 단계로 진행하세요:
 - [ ] 인증 실패 시나리오 테스트
 - [ ] 권한 부족 시나리오 테스트
 - [ ] H2 Console에서 데이터 확인
+- [ ] 캐시 동작 확인 (로그에서 "cache miss" 확인)
+- [ ] 캐시 히트 확인 (동일한 회원 조회 시 DB 쿼리 없음)
+- [ ] 캐시 무효화 확인 (회원 수정 후 캐시 미스 발생)

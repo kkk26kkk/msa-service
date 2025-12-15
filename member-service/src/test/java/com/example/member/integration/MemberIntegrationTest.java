@@ -25,7 +25,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 
  * 실제 Spring Boot 컨텍스트를 로드하여 전체 플로우를 테스트합니다.
  */
-@SpringBootTest
+@SpringBootTest(properties = {
+    "spring.cloud.config.enabled=false",
+    "spring.cloud.config.fail-fast=false",
+    "eureka.client.enabled=false"
+})
 @AutoConfigureWebMvc
 @ActiveProfiles("test")
 @Transactional
@@ -155,7 +159,7 @@ class MemberIntegrationTest {
         mockMvc.perform(post("/members")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(duplicateUsernameRequest)))
-                .andExpected(status().isConflict())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Duplicate Member"));
 
         // 2. 중복된 이메일로 회원 생성 시도
@@ -169,7 +173,7 @@ class MemberIntegrationTest {
         mockMvc.perform(post("/members")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(duplicateEmailRequest)))
-                .andExpected(status().isConflict());
+                .andExpect(status().isConflict());
     }
 
     @Test
@@ -185,7 +189,7 @@ class MemberIntegrationTest {
 
         // 3. 삭제된 회원 조회 시도 (404 에러 발생해야 함)
         mockMvc.perform(get("/members/{id}", existingMember.getId()))
-                .andExpected(status().isNotFound());
+                .andExpect(status().isNotFound());
 
         // 4. 전체 회원 수 확인 (0명이어야 함)
         mockMvc.perform(get("/members/all"))
@@ -196,13 +200,13 @@ class MemberIntegrationTest {
     @Test
     @DisplayName("페이징 기능 테스트")
     void paginationFlow() throws Exception {
-        // 1. 추가 테스트 데이터 생성 (총 6명)
+        // 1. 추가 테스트 데이터 생성 (총 6명: existinguser + pagination_user1~5)
         for (int i = 1; i <= 5; i++) {
             Member member = Member.builder()
-                    .username("user" + i)
+                    .username("pagination_user" + i)
                     .password("password123")
-                    .email("user" + i + "@example.com")
-                    .fullName("사용자" + i)
+                    .email("pagination_user" + i + "@example.com")
+                    .fullName("페이징 사용자" + i)
                     .status(Member.MemberStatus.ACTIVE)
                     .build();
             memberRepository.save(member);

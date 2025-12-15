@@ -2,6 +2,7 @@ package com.example.member;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 
 /**
@@ -14,12 +15,14 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
  * - Eureka Discovery Service에 등록
  * - Config Server에서 설정 관리
  * - H2 인메모리 데이터베이스 사용
+ * - Caffeine Cache를 활용한 캐싱 전략
  * 
  * 접속 URL: http://localhost:8081
  * H2 Console: http://localhost:8081/h2-console
  */
 @SpringBootApplication
 @EnableDiscoveryClient
+@EnableCaching
 public class MemberServiceApplication {
 
     public static void main(String[] args) {

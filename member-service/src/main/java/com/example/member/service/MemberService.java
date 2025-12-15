@@ -7,6 +7,9 @@ import com.example.member.exception.DuplicateMemberException;
 import com.example.member.repository.MemberRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -26,15 +29,20 @@ public class MemberService {
 
     private static final Logger log = LoggerFactory.getLogger(MemberService.class);
     private final MemberRepository memberRepository;
+    private final CacheManager cacheManager;
 
-    public MemberService(MemberRepository memberRepository) {
+    public MemberService(MemberRepository memberRepository, CacheManager cacheManager) {
         this.memberRepository = memberRepository;
+        this.cacheManager = cacheManager;
     }
 
     /**
      * 회원 생성
+     * 
+     * 새 회원 생성 시 활성 회원 수 캐시를 무효화합니다.
      */
     @Transactional
+    @CacheEvict(value = "activeMemberCount", allEntries = true)
     public MemberDto.Response createMember(MemberDto.CreateRequest request) {
         log.info("Creating new member with username: {}", request.getUsername());
 
@@ -57,9 +65,13 @@ public class MemberService {
 
     /**
      * ID로 회원 조회
+     * 
+     * 캐시 키: 회원 ID
+     * 캐시 이름: "members"
      */
+    @Cacheable(value = "members", key = "#id", unless = "#result == null")
     public MemberDto.Response getMemberById(Long id) {
-        log.debug("Retrieving member by ID: {}", id);
+        log.debug("Retrieving member by ID: {} (cache miss)", id);
 
         Member member = memberRepository.findById(id)
                 .orElseThrow(() -> new MemberNotFoundException("회원을 찾을 수 없습니다. ID: " + id));
@@ -69,9 +81,13 @@ public class MemberService {
 
     /**
      * 사용자명으로 회원 조회
+     * 
+     * 캐시 키: 사용자명
+     * 캐시 이름: "memberByUsername"
      */
+    @Cacheable(value = "memberByUsername", key = "#username", unless = "#result == null")
     public MemberDto.Response getMemberByUsername(String username) {
-        log.debug("Retrieving member by username: {}", username);
+        log.debug("Retrieving member by username: {} (cache miss)", username);
 
         Member member = memberRepository.findByUsername(username)
                 .orElseThrow(() -> new MemberNotFoundException("회원을 찾을 수 없습니다. Username: " + username));
@@ -115,6 +131,11 @@ public class MemberService {
 
     /**
      * 회원 정보 수정
+     * 
+     * 회원 정보 수정 시 관련 캐시를 무효화합니다:
+     * - ID로 조회한 캐시
+     * - 사용자명으로 조회한 캐시
+     * - 활성 회원 수 캐시 (상태 변경 시)
      */
     @Transactional
     public MemberDto.Response updateMember(Long id, MemberDto.UpdateRequest request) {
@@ -122,6 +143,10 @@ public class MemberService {
 
         Member member = memberRepository.findById(id)
                 .orElseThrow(() -> new MemberNotFoundException("회원을 찾을 수 없습니다. ID: " + id));
+
+        // 수정 전 사용자명 저장 (캐시 무효화용)
+        String username = member.getUsername();
+        boolean statusChanged = request.getStatus() != null && !request.getStatus().equals(member.getStatus());
 
         // 수정 가능한 필드 업데이트
         if (request.getFullName() != null) {
@@ -135,23 +160,69 @@ public class MemberService {
         }
 
         Member updatedMember = memberRepository.save(member);
+        
+        // 캐시 무효화
+        evictMemberCaches(id, username);
+        if (statusChanged) {
+            evictActiveMemberCountCache();
+        }
+        
         log.info("Member updated successfully with ID: {}", updatedMember.getId());
 
         return MemberDto.Response.from(updatedMember);
     }
+    
+    /**
+     * 회원 캐시 무효화 (내부 메서드)
+     * 
+     * ID와 사용자명으로 조회한 캐시를 무효화합니다.
+     */
+    private void evictMemberCaches(Long id, String username) {
+        // ID로 조회한 캐시 무효화
+        var membersCache = cacheManager.getCache("members");
+        if (membersCache != null) {
+            membersCache.evict(id);
+        }
+        
+        // 사용자명으로 조회한 캐시 무효화
+        var usernameCache = cacheManager.getCache("memberByUsername");
+        if (usernameCache != null) {
+            usernameCache.evict(username);
+        }
+    }
+    
+    /**
+     * 활성 회원 수 캐시 무효화
+     */
+    @CacheEvict(value = "activeMemberCount", allEntries = true)
+    public void evictActiveMemberCountCache() {
+        // 캐시 무효화를 위한 메서드 (AOP 프록시를 통한 호출 필요)
+    }
 
     /**
      * 회원 삭제
+     * 
+     * 회원 삭제 시 관련 캐시를 무효화합니다:
+     * - ID로 조회한 캐시
+     * - 사용자명으로 조회한 캐시
+     * - 활성 회원 수 캐시
      */
     @Transactional
     public void deleteMember(Long id) {
         log.info("Deleting member with ID: {}", id);
 
-        if (!memberRepository.existsById(id)) {
-            throw new MemberNotFoundException("회원을 찾을 수 없습니다. ID: " + id);
-        }
+        // 삭제 전 회원 정보 조회 (캐시 무효화용)
+        Member member = memberRepository.findById(id)
+                .orElseThrow(() -> new MemberNotFoundException("회원을 찾을 수 없습니다. ID: " + id));
+        
+        String username = member.getUsername();
 
         memberRepository.deleteById(id);
+        
+        // 캐시 무효화
+        evictMemberCaches(id, username);
+        evictActiveMemberCountCache();
+        
         log.info("Member deleted successfully with ID: {}", id);
     }
 
@@ -169,9 +240,13 @@ public class MemberService {
 
     /**
      * 활성 회원 수 조회
+     * 
+     * 캐시 키: 없음 (단일 값)
+     * 캐시 이름: "activeMemberCount"
      */
+    @Cacheable(value = "activeMemberCount", unless = "#result == null")
     public long getActiveMemberCount() {
-        log.debug("Retrieving active member count");
+        log.debug("Retrieving active member count (cache miss)");
         return memberRepository.countActiveMembers();
     }
 }
