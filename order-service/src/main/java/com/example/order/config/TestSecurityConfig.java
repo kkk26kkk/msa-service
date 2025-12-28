@@ -1,6 +1,7 @@
 package com.example.order.config;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -9,6 +10,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 
 @Configuration
 @ConditionalOnProperty(name = "security.enabled", havingValue = "false")
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class TestSecurityConfig {
 
     @Bean

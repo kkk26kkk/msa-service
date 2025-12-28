@@ -28,15 +28,7 @@ spring:
     init:
       mode: always
 
-logging:
-  level:
-    com.example.member: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
-    org.springframework.cache: DEBUG
-
-# 캐시 설정
-spring:
+  # 캐시 설정
   cache:
     type: caffeine
     caffeine:
@@ -45,6 +37,13 @@ spring:
       - members
       - memberByUsername
       - activeMemberCount
+
+logging:
+  level:
+    com.example.member: DEBUG
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.cache: DEBUG
 
 # Management endpoints 활성화
 management:

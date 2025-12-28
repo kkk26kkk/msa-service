@@ -10,9 +10,10 @@
 2. [코드 구조 분석](#2-코드-구조-분석)
 3. [OpenFeign을 통한 서비스 간 통신](#3-openfeign을-통한-서비스-간-통신)
 4. [Circuit Breaker 및 Fallback](#4-circuit-breaker-및-fallback)
-5. [JWT 토큰 전파](#5-jwt-토큰-전파)
-6. [API 엔드포인트](#6-api-엔드포인트)
-7. [실습 가이드](#7-실습-가이드)
+5. [재시도 메커니즘 (Retry)](#5-재시도-메커니즘-retry)
+6. [JWT 토큰 전파](#6-jwt-토큰-전파)
+7. [API 엔드포인트](#7-api-엔드포인트)
+8. [실습 가이드](#8-실습-가이드)
 
 ---
 
@@ -579,7 +580,263 @@ public ResponseEntity<Map<String, Object>> getCircuitBreakerStatus() {
 
 ---
 
-## 5. JWT 토큰 전파
+## 5. 재시도 메커니즘 (Retry)
+
+### 5.1 Retry란?
+
+**Retry**는 일시적인 네트워크 오류나 서비스 일시 중단 시 자동으로 요청을 재시도하는 패턴입니다.
+
+**재시도 전략**:
+- **고정 간격**: 동일한 시간 간격으로 재시도
+- **지수 백오프**: 재시도 간격이 지수적으로 증가 (1초 → 2초 → 4초)
+- **랜덤 백오프**: 재시도 간격에 랜덤 요소 추가
+
+**재시도 조건**:
+- 네트워크 연결 오류 (`ConnectException`)
+- 타임아웃 오류 (`SocketTimeoutException`)
+- I/O 오류 (`IOException`)
+- **재시도 제외**: 4xx 클라이언트 오류 (재시도해도 실패)
+
+### 5.2 Resilience4j Retry 설정
+
+```yaml
+# Retry 설정
+resilience4j:
+  retry:
+    instances:
+      member-service:
+        maxAttempts: 3                    # 최대 재시도 횟수 (초기 시도 1회 + 재시도 2회 = 총 3회)
+        waitDuration: 1000                 # 초기 대기 시간 (1초)
+        enableExponentialBackoff: true     # 지수 백오프 활성화
+        exponentialBackoffMultiplier: 2    # 지수 백오프 배수 (1초 → 2초 → 4초)
+        retryExceptions:                   # 재시도 대상 예외
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException
+          - java.io.IOException
+          - org.springframework.web.client.ResourceAccessException
+          - feign.RetryableException       # OpenFeign의 재시도 가능 예외
+          - feign.FeignException           # OpenFeign의 일반 예외
+        ignoreExceptions:                  # 재시도 제외 예외
+          - org.springframework.web.client.HttpClientErrorException
+        subscribeToEvents: true           # 이벤트 구독 활성화
+```
+
+**설정 항목**:
+- `maxAttempts`: 최대 재시도 횟수 (초기 시도 포함, 총 3회)
+- `waitDuration`: 초기 대기 시간 (1초)
+- `enableExponentialBackoff`: 지수 백오프 활성화
+- `exponentialBackoffMultiplier`: 지수 백오프 배수 (2배씩 증가)
+- `retryExceptions`: 재시도 대상 예외 목록
+- `ignoreExceptions`: 재시도 제외 예외 목록 (4xx 클라이언트 오류)
+- `subscribeToEvents`: Retry 이벤트 구독 활성화
+
+### 5.3 Retry 적용
+
+**MemberIntegrationService에 `@Retryable` 어노테이션 적용**:
+
+```java
+@Service
+public class MemberIntegrationService {
+    private final MemberServiceClient memberServiceClient;
+
+    /**
+     * 회원 정보 검증 (Retry, Circuit Breaker 및 Fallback 적용)
+     * 
+     * 실행 순서:
+     * 1. @Retryable: 일시적인 네트워크 오류 시 자동 재시도 (최대 3회, 지수 백오프)
+     * 2. @CircuitBreaker: 재시도 실패 후 Circuit Breaker가 실패를 카운트
+     * 3. Circuit Breaker가 열리면 Fallback 메서드 실행
+     */
+    @Retry(name = "member-service")
+    @CircuitBreaker(name = "member-service", fallbackMethod = "validateMemberFallback")
+    public MemberServiceClient.MemberDto validateMember(Long memberId) {
+        log.debug("Validating member with ID: {}", memberId);
+        return memberServiceClient.getMemberById(memberId);
+    }
+
+    @Retry(name = "member-service")
+    @CircuitBreaker(name = "member-service", fallbackMethod = "getMemberNameFallback")
+    public String getMemberName(Long memberId) {
+        log.debug("Getting member name for ID: {}", memberId);
+        MemberServiceClient.MemberDto member = memberServiceClient.getMemberById(memberId);
+        return member.getFullName();
+    }
+}
+```
+
+**실행 순서**:
+1. **Retry 실행**: 일시적인 네트워크 오류 시 자동 재시도 (최대 3회, 지수 백오프)
+2. **재시도 성공**: 정상 응답 반환
+3. **재시도 실패**: 모든 재시도가 실패하면 Circuit Breaker가 실패를 카운트
+4. **Circuit Breaker 열림**: 실패율이 임계값을 초과하면 Circuit Breaker가 OPEN 상태로 전환
+5. **Fallback 실행**: Circuit Breaker가 열리면 Fallback 메서드 자동 실행
+
+### 5.4 지수 백오프 (Exponential Backoff)
+
+**지수 백오프**는 재시도 간격이 지수적으로 증가하는 전략입니다.
+
+**예시**:
+- **1차 시도**: 즉시 실행
+- **1차 재시도**: 1초 대기 후 실행
+- **2차 재시도**: 2초 대기 후 실행 (1초 × 2)
+- **3차 재시도**: 4초 대기 후 실행 (2초 × 2)
+
+**장점**:
+- 서버 부하를 점진적으로 증가시킴
+- 일시적인 장애 복구 시간 제공
+- 불필요한 재시도 감소
+
+### 5.5 Retry 이벤트 리스너
+
+**RetryEventListener**는 Retry 이벤트를 모니터링하고 로깅합니다.
+
+**중요**: Resilience4j의 이벤트는 Spring의 `@EventListener`가 아닌 `RetryRegistry`를 통한 직접 구독 방식을 사용해야 합니다.
+
+```java
+@Configuration
+public class RetryEventListener {
+    private static final Logger log = LoggerFactory.getLogger(RetryEventListener.class);
+
+    /**
+     * RetryRegistry에 이벤트 리스너 등록
+     * 
+     * Retry 인스턴스가 생성될 때 자동으로 이벤트 리스너를 등록합니다.
+     */
+    @Bean
+    public RegistryEventConsumer<Retry> customRetryRegistryEventConsumer() {
+        return new RegistryEventConsumer<Retry>() {
+            @Override
+            public void onEntryAddedEvent(EntryAddedEvent<Retry> entryAddedEvent) {
+                Retry retry = entryAddedEvent.getAddedEntry();
+                log.info("Retry '{}' registered", retry.getName());
+                
+                // 재시도 이벤트 리스너 등록
+                retry.getEventPublisher()
+                    .onRetry(event -> {
+                        log.warn(
+                            "[RETRY] 재시도 시도 - Name: {}, Attempt: {}, Wait Time: {}ms, Exception: {}",
+                            event.getName(),
+                            event.getNumberOfRetryAttempts(),
+                            event.getWaitInterval().toMillis(),
+                            event.getLastThrowable() != null 
+                                ? event.getLastThrowable().getClass().getSimpleName() 
+                                : "N/A"
+                        );
+                    })
+                    .onSuccess(event -> {
+                        if (event.getNumberOfRetryAttempts() > 0) {
+                            log.info(
+                                "[RETRY] 재시도 성공 - Name: {}, Attempt: {}",
+                                event.getName(),
+                                event.getNumberOfRetryAttempts()
+                            );
+                        }
+                    })
+                    .onError(event -> {
+                        log.error(
+                            "[RETRY] 재시도 실패 - Name: {}, Attempt: {}, Exception: {}",
+                            event.getName(),
+                            event.getNumberOfRetryAttempts(),
+                            event.getLastThrowable() != null 
+                                ? event.getLastThrowable().getClass().getSimpleName() 
+                                : "N/A",
+                            event.getLastThrowable()
+                        );
+                    })
+                    .onIgnoredError(event -> {
+                        log.debug(
+                            "[RETRY] 재시도 무시 - Name: {}, Exception: {} (재시도 대상이 아닌 예외)",
+                            event.getName(),
+                            event.getLastThrowable() != null 
+                                ? event.getLastThrowable().getClass().getSimpleName() 
+                                : "N/A"
+                        );
+                    });
+            }
+
+            @Override
+            public void onEntryRemovedEvent(EntryRemovedEvent<Retry> entryRemoveEvent) {
+                log.info("Retry '{}' removed", entryRemoveEvent.getRemovedEntry().getName());
+            }
+
+            @Override
+            public void onEntryReplacedEvent(EntryReplacedEvent<Retry> entryReplacedEvent) {
+                log.info("Retry '{}' replaced", entryReplacedEvent.getNewEntry().getName());
+            }
+        };
+    }
+}
+```
+
+**이벤트 종류**:
+- `RetryOnRetryEvent`: 재시도 시도 시 발생
+- `RetryOnSuccessEvent`: 재시도 후 성공 시 발생
+- `RetryOnErrorEvent`: 모든 재시도 실패 시 발생
+- `RetryOnIgnoredErrorEvent`: 재시도 대상이 아닌 예외 발생 시 발생
+
+### 5.6 Retry와 Circuit Breaker 조합
+
+**Retry와 Circuit Breaker를 함께 사용하는 이유**:
+- **Retry**: 일시적인 네트워크 오류를 자동으로 재시도하여 성공률 향상
+- **Circuit Breaker**: 지속적인 장애 시 요청을 차단하여 리소스 보호
+
+**동작 흐름**:
+```
+1. 요청 발생
+   ↓
+2. @Retryable 실행
+   - 일시적인 오류 발생 → 재시도 (최대 3회)
+   - 재시도 성공 → 정상 응답 반환
+   ↓
+3. 모든 재시도 실패
+   ↓
+4. @CircuitBreaker 실행
+   - Circuit Breaker가 실패를 카운트
+   - 실패율이 임계값(50%) 초과 → Circuit Breaker OPEN
+   ↓
+5. Fallback 실행
+   - Fallback 메서드가 실행되어 기본값 반환
+```
+
+### 5.7 Retry 상태 확인
+
+**Actuator 엔드포인트를 통한 Retry 상태 확인**:
+
+```bash
+# Retry 인스턴스 목록
+GET /actuator/retries
+
+# Retry 이벤트 조회
+GET /actuator/retryevents/member-service
+```
+
+**예상 응답**:
+```json
+{
+  "retryEvents": [
+    {
+      "retryName": "member-service",
+      "type": "RETRY",
+      "creationTime": "2024-01-01T12:00:00Z",
+      "numberOfRetryAttempts": 1,
+      "lastThrowable": "java.net.ConnectException"
+    }
+  ]
+}
+```
+
+### 5.8 재시도 전략 선택 가이드
+
+| 상황 | 전략 | 이유 |
+|------|------|------|
+| 일시적인 네트워크 오류 | 지수 백오프 | 서버 부하를 점진적으로 증가시킴 |
+| 타임아웃 오류 | 고정 간격 | 일정한 간격으로 재시도 |
+| 서버 과부하 | 지수 백오프 + 최대 재시도 제한 | 서버 복구 시간 제공 |
+| 4xx 클라이언트 오류 | 재시도 제외 | 재시도해도 실패하므로 즉시 실패 처리 |
+
+---
+
+## 6. JWT 토큰 전파
 
 ### 5.1 JWT 토큰 전파 흐름
 
@@ -646,7 +903,7 @@ public class FeignClientConfig {
 
 ---
 
-## 6. API 엔드포인트
+## 7. API 엔드포인트
 
 ### 6.1 API 목록
 
@@ -707,7 +964,7 @@ Content-Type: application/json
 
 ---
 
-## 7. 실습 가이드
+## 8. 실습 가이드
 
 ### 7.1 Order Service 실행
 
@@ -780,9 +1037,9 @@ curl -X GET http://localhost:8082/test/circuit-breaker-status \
 }
 ```
 
-### 7.7 Fallback 동작 테스트
+### 8.7 Fallback 동작 테스트
 
-#### 7.7.1 Member Service 중지
+#### 8.7.1 Member Service 중지
 
 1. Member Service를 중지합니다.
 2. 주문 생성 요청을 여러 번 보냅니다:
@@ -806,7 +1063,7 @@ curl -X POST http://localhost:8082/orders \
 - `@CircuitBreaker`가 자동으로 Fallback 메서드 호출
 - Fallback 메서드가 실행되어 "알 수 없는 사용자"로 주문 생성
 
-#### 7.7.2 Circuit Breaker 상태 확인
+#### 8.7.2 Circuit Breaker 상태 확인
 
 ```bash
 curl -X GET http://localhost:8082/test/circuit-breaker-status \
@@ -825,7 +1082,7 @@ curl -X GET http://localhost:8082/test/circuit-breaker-status \
 }
 ```
 
-#### 7.7.3 Member Service 재시작
+#### 8.7.3 Member Service 재시작
 
 1. Member Service를 재시작합니다.
 2. 10초 후 Circuit Breaker 상태 확인:
@@ -846,7 +1103,7 @@ curl -X GET http://localhost:8082/test/circuit-breaker-status \
 
 3. 테스트 요청이 성공하면 CLOSED 상태로 복귀합니다.
 
-### 7.8 JWT 토큰 전파 확인
+### 8.8 JWT 토큰 전파 확인
 
 1. 주문 생성 요청:
 
@@ -866,11 +1123,110 @@ curl -X POST http://localhost:8082/orders \
    - Member Service 호출 시 Authorization 헤더가 포함되어 있는지
    - Member Service가 JWT 토큰을 검증하여 인증 성공하는지
 
+### 8.9 재시도 메커니즘 테스트
+
+**중요 사항**:
+- Config Server를 사용하는 경우, `config-repo/order-service.yml` 파일을 수정한 후 **반드시 Config Server를 재시작**해야 변경사항이 반영됩니다.
+- 로그에서 `[RETRY] 재시도 무시 - Exception: RetryableException` 메시지가 나타나면, `retryExceptions`에 `feign.RetryableException`과 `feign.FeignException`이 포함되어 있는지 확인하세요.
+
+#### 8.9.1 Member Service 일시 중단 후 재시도 동작 확인
+
+1. Member Service를 일시적으로 중지합니다.
+2. 주문 생성 요청을 보냅니다:
+
+```bash
+curl -X POST http://localhost:8082/orders \
+  -H "Authorization: Bearer {JWT_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "memberId": 1,
+    "productName": "테스트 상품",
+    "quantity": 1,
+    "unitPrice": 10000.00
+  }'
+```
+
+**예상 동작**:
+- 첫 번째 시도 실패 (RetryableException 또는 ConnectException)
+- 1초 대기 후 1차 재시도
+- 2초 대기 후 2차 재시도
+- 모든 재시도 실패 후 예외 발생
+
+**로그 확인**:
+```
+[RETRY] 재시도 시도 - Name: member-service, Attempt: 1, Wait Time: 1000ms, Exception: RetryableException
+[RETRY] 재시도 시도 - Name: member-service, Attempt: 2, Wait Time: 2000ms, Exception: RetryableException
+[RETRY] 재시도 실패 - Name: member-service, Attempt: 3, Exception: RetryableException
+```
+
+**트러블슈팅**:
+- 만약 `[RETRY] 재시도 무시` 메시지가 나타나면:
+  1. Config Server의 `config-repo/order-service.yml` 파일에서 `retryExceptions`에 `feign.RetryableException`과 `feign.FeignException`이 포함되어 있는지 확인
+  2. Config Server 재시작
+  3. Order Service 재시작
+
+#### 8.9.2 Member Service 복구 후 재시도 성공 확인
+
+1. Member Service를 재시작합니다.
+2. 주문 생성 요청을 보냅니다:
+
+```bash
+curl -X POST http://localhost:8082/orders \
+  -H "Authorization: Bearer {JWT_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "memberId": 1,
+    "productName": "테스트 상품",
+    "quantity": 1,
+    "unitPrice": 10000.00
+  }'
+```
+
+**예상 동작**:
+- 첫 번째 시도 실패 (ConnectException)
+- 1초 대기 후 1차 재시도 성공
+- 정상 응답 반환
+
+**로그 확인**:
+```
+[RETRY] 재시도 시도 - Name: member-service, Attempt: 1, Wait Time: 1000ms, Exception: ConnectException
+[RETRY] 재시도 성공 - Name: member-service, Attempt: 1
+```
+
+#### 8.9.3 Retry 이벤트 확인
+
+```bash
+# Retry 이벤트 조회
+curl -X GET http://localhost:8082/actuator/retryevents/member-service \
+  -H "Authorization: Bearer {JWT_TOKEN}"
+```
+
+**예상 응답**:
+```json
+{
+  "retryEvents": [
+    {
+      "retryName": "member-service",
+      "type": "RETRY",
+      "creationTime": "2024-01-01T12:00:00Z",
+      "numberOfRetryAttempts": 1,
+      "lastThrowable": "java.net.ConnectException"
+    },
+    {
+      "retryName": "member-service",
+      "type": "SUCCESS",
+      "creationTime": "2024-01-01T12:00:01Z",
+      "numberOfRetryAttempts": 1
+    }
+  ]
+}
+```
+
 ---
 
-## 8. 핵심 개념 정리
+## 9. 핵심 개념 정리
 
-### 8.1 OpenFeign
+### 9.1 OpenFeign
 
 | 개념 | 설명 |
 |------|------|
@@ -879,7 +1235,7 @@ curl -X POST http://localhost:8082/orders \
 | **RequestInterceptor** | 요청 전처리 (JWT 토큰 전파 등) |
 | **@CircuitBreaker** | Resilience4j 어노테이션으로 Circuit Breaker 및 Fallback 적용 |
 
-### 8.2 Circuit Breaker
+### 9.2 Circuit Breaker
 
 | 개념 | 설명 |
 |------|------|
@@ -888,7 +1244,7 @@ curl -X POST http://localhost:8082/orders \
 | **HALF_OPEN** | 반열림 상태 (테스트 요청 허용) |
 | **Failure Rate** | 실패율 (실패한 요청 / 전체 요청) |
 
-### 8.3 Fallback (Resilience4j @CircuitBreaker)
+### 9.3 Fallback (Resilience4j @CircuitBreaker)
 
 | 개념 | 설명 |
 |------|------|
@@ -901,9 +1257,23 @@ curl -X POST http://localhost:8082/orders \
 | **MemberIntegrationService** | Member Service 통신 전담 서비스, Circuit Breaker 로직 포함 |
 | **순환 참조 해결** | 별도 서비스로 분리하여 자기 주입(self-injection) 불필요 |
 
+### 9.4 Retry (Resilience4j @Retryable)
+
+| 개념 | 설명 |
+|------|------|
+| **@Retryable** | Resilience4j 어노테이션으로 재시도 패턴 적용 |
+| **maxAttempts** | 최대 재시도 횟수 (초기 시도 포함) |
+| **waitDuration** | 초기 대기 시간 |
+| **enableExponentialBackoff** | 지수 백오프 활성화 |
+| **exponentialBackoffMultiplier** | 지수 백오프 배수 |
+| **retryExceptions** | 재시도 대상 예외 목록 |
+| **ignoreExceptions** | 재시도 제외 예외 목록 |
+| **Retry 이벤트** | 재시도 시도, 성공, 실패 이벤트 모니터링 |
+| **Retry + Circuit Breaker** | 일시적인 오류는 재시도, 지속적인 장애는 Circuit Breaker로 차단 |
+
 ---
 
-## 9. 다음 단계
+## 10. 다음 단계
 
 Order Service를 이해했다면, 다음 단계로 진행하세요:
 
@@ -911,7 +1281,7 @@ Order Service를 이해했다면, 다음 단계로 진행하세요:
 
 ---
 
-## 10. 실습 체크리스트
+## 11. 실습 체크리스트
 
 - [ ] Order Service 실행
 - [ ] Auth Service에서 JWT 토큰 발급
@@ -923,3 +1293,7 @@ Order Service를 이해했다면, 다음 단계로 진행하세요:
 - [ ] Circuit Breaker OPEN 상태 확인
 - [ ] Member Service 재시작 후 HALF_OPEN → CLOSED 전환 확인
 - [ ] JWT 토큰 전파 확인
+- [ ] Member Service 일시 중단 후 재시도 동작 확인
+- [ ] 재시도 로그 확인
+- [ ] 지수 백오프 동작 확인
+- [ ] Retry 이벤트 확인

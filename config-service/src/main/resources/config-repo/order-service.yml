@@ -53,6 +53,23 @@ resilience4j:
         wait-duration-in-open-state: 10000
         permitted-number-of-calls-in-half-open-state: 3
         minimum-number-of-calls: 5
+  retry:
+    instances:
+      member-service:
+        maxAttempts: 3
+        waitDuration: 1000
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException
+          - java.io.IOException
+          - org.springframework.web.client.ResourceAccessException
+          - feign.RetryableException
+          - feign.FeignException
+        ignoreExceptions:
+          - org.springframework.web.client.HttpClientErrorException
+        subscribeToEvents: true
 
 # JWT 설정
 security:
@@ -65,11 +82,15 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,env,circuitbreakers
+        include: health,info,env,circuitbreakers,retries,retryevents
   endpoint:
     health:
       show-details: always
     circuitbreakers:
+      enabled: true
+    retries:
+      enabled: true
+    retryevents:
       enabled: true
 
 logging:
@@ -78,3 +99,4 @@ logging:
     com.example.order.client: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    io.github.resilience4j.retry: DEBUG

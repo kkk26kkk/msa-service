@@ -1,2 +1,32 @@
 ﻿security:
   enabled: false
+
+# Retry 설정 (테스트용)
+resilience4j:
+  retry:
+    instances:
+      member-service:
+        max-attempts: 3
+        wait-duration: 100ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        # 테스트에서는 retry-exceptions를 명시하지 않아 기본적으로 모든 예외에 대해 재시도하지 않습니다.
+        # 실제 운영 환경에서는 retryExceptions를 명시해야 합니다.
+        # 테스트의 경우 MockBean을 통해 예외를 직접 제어하므로 retry-exceptions를 생략합니다.
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
+  circuitbreaker:
+    instances:
+      member-service:
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 2000ms
+        slow-call-rate-threshold: 100
+        minimum-number-of-calls: 1  # 테스트를 위해 최소 호출 횟수를 1로 설정
+        sliding-window-size: 10
+        wait-duration-in-open-state: 10000ms
+
+logging:
+  level:
+    com.example.order: DEBUG
+    io.github.resilience4j.retry: DEBUG
+    io.github.resilience4j.circuitbreaker: DEBUG

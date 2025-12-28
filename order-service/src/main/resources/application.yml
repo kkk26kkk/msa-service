@@ -58,20 +58,46 @@ resilience4j:
       member-service:
         sliding-window-size: 10
         failure-rate-threshold: 50
-        wait-duration-in-open-state: 10000
+        wait-duration-in-open-state: 10000ms
         permitted-number-of-calls-in-half-open-state: 3
         minimum-number-of-calls: 5
+  retry:
+    instances:
+      member-service:
+        max-attempts: 3
+        wait-duration: 1000ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        # Feign이 발생시키는 예외들을 재시도 대상에 포함
+        retry-exceptions:
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException
+          - java.io.IOException
+          - org.springframework.web.client.ResourceAccessException
+          - feign.RetryableException
+          - feign.FeignException
+        ignore-exceptions:
+          - org.springframework.web.client.HttpClientErrorException
+          - feign.FeignException$BadRequest
+          - feign.FeignException$Unauthorized
+          - feign.FeignException$Forbidden
+          - feign.FeignException$NotFound
+        enable-event-consumer-buffer: true
 
 # Management endpoints 활성화 (로컬 실행용)
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,env,circuitbreakers
+        include: health,info,env,circuitbreakers,retries,retryevents
   endpoint:
     health:
       show-details: always
     circuitbreakers:
+      enabled: true
+    retries:
+      enabled: true
+    retryevents:
       enabled: true
 
 # Eureka 활성화 (Gateway와 연동을 위해)
@@ -93,3 +119,4 @@ logging:
     com.example.order.client: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    io.github.resilience4j.retry: DEBUG
