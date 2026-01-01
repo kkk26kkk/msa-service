@@ -11,10 +11,11 @@
 3. [라우팅 설정](#3-라우팅-설정)
 4. [인증 필터 (JWT 토큰 검증)](#4-인증-필터-jwt-토큰-검증)
 5. [Circuit Breaker 및 Fallback](#5-circuit-breaker-및-fallback)
-6. [CORS 설정](#6-cors-설정)
-7. [요청 로깅](#7-요청-로깅)
-8. [API 엔드포인트](#8-api-엔드포인트)
-9. [실습 가이드](#9-실습-가이드)
+6. [Rate Limiting](#6-rate-limiting)
+7. [CORS 설정](#7-cors-설정)
+8. [요청 로깅](#8-요청-로깅)
+9. [API 엔드포인트](#9-api-엔드포인트)
+10. [실습 가이드](#10-실습-가이드)
 
 ---
 
@@ -29,6 +30,7 @@
 - **로드 밸런싱**: Eureka를 통한 서비스 인스턴스 간 로드 밸런싱
 - **인증**: JWT 토큰 검증 및 사용자 정보 추출
 - **Circuit Breaker**: 백엔드 서비스 장애 시 Fallback 처리
+- **Rate Limiting**: API 요청 제한 (IP별, 사용자별)
 - **CORS**: Cross-Origin Resource Sharing 설정
 - **요청 로깅**: 모든 요청에 대한 로깅
 
@@ -37,7 +39,7 @@
 - **Spring Cloud Gateway**: 리액티브 웹 프레임워크 기반 API Gateway
 - **Spring WebFlux**: 비동기 논블로킹 처리
 - **Netflix Eureka**: 서비스 디스커버리 및 로드 밸런싱
-- **Resilience4j**: Circuit Breaker 패턴
+- **Resilience4j**: Circuit Breaker 및 Rate Limiter 패턴
 - **JJWT**: JWT 토큰 검증
 
 ### 1.3 서비스 포트
@@ -653,7 +655,194 @@ Circuit Breaker가 OPEN 상태일 때 Fallback 핸들러가 실행됩니다.
 
 ---
 
-## 6. CORS 설정
+## 6. Rate Limiting
+
+### 6.1 Rate Limiting 개요
+
+**Rate Limiting**은 API 요청의 빈도를 제한하여 시스템을 보호하고 DDoS 공격을 방어하는 기능입니다.
+
+**주요 기능**:
+- **IP별 Rate Limiting**: 클라이언트 IP 주소별로 요청 제한
+- **사용자별 Rate Limiting**: 인증된 사용자별로 요청 제한 (JWT 토큰 기반)
+- **Rate Limit 초과 시 429 Too Many Requests 응답**
+
+**Rate Limiting 전략**:
+- **기본 제한**: 초당 10개 요청 (IP별)
+- **인증된 사용자**: 초당 50개 요청 (사용자별)
+- **특정 엔드포인트**: 별도 제한 설정 가능
+
+### 6.2 RateLimiter 설정
+
+**설정 파일**: `config-service/src/main/resources/config-repo/gateway-service.yml`
+
+```yaml
+resilience4j:
+  ratelimiter:
+    configs:
+      default:
+        limitForPeriod: 10  # 초당 10개 요청
+        limitRefreshPeriod: 1s  # 1초마다 리프레시
+        timeoutDuration: 0  # 타임아웃 없음
+        subscribeToEvents: true  # 이벤트 구독 활성화
+      ip-based:
+        baseConfig: default
+        limitForPeriod: 10  # IP별: 초당 10개 요청
+      user-based:
+        baseConfig: default
+        limitForPeriod: 50  # 사용자별: 초당 50개 요청
+    instances:
+      ip-rate-limiter:
+        baseConfig: ip-based
+      user-rate-limiter:
+        baseConfig: user-based
+```
+
+**설정 항목**:
+- `limitForPeriod`: 기간 내 허용되는 최대 요청 수
+- `limitRefreshPeriod`: 제한이 리프레시되는 주기 (1초)
+- `timeoutDuration`: 요청이 대기할 수 있는 최대 시간 (0 = 타임아웃 없음)
+- `subscribeToEvents`: Rate Limiter 이벤트 구독 활성화
+
+### 6.3 Rate Limiting 필터
+
+**필터 클래스**: `RateLimitingFilter`
+
+**필터 설정**: `gateway-service.yml`의 `default-filters`에 추가되어 모든 라우트에 자동으로 적용됩니다.
+
+```yaml
+spring:
+  cloud:
+    gateway:
+      default-filters:
+        - RequestLogging
+        - RateLimitingFilter      # Rate Limiting 필터
+        - AuthenticationFilter
+```
+
+**Rate Limiting 키 결정 로직**:
+1. **인증된 사용자 확인**: JWT 토큰이 유효하면 사용자명 사용 (`user:{username}`)
+2. **IP 주소 사용**: 인증되지 않은 요청은 IP 주소 사용 (`ip:{ip-address}`)
+
+**Rate Limiting 제외 경로**:
+- `/actuator`: Actuator 엔드포인트는 Rate Limiting 제외
+
+### 6.4 Rate Limit 초과 시 응답
+
+**HTTP 상태 코드**: `429 Too Many Requests`
+
+**응답 헤더**:
+```
+X-RateLimit-Exceeded: true
+X-RateLimit-Key: ip:127.0.0.1
+```
+
+**응답 예시**:
+```http
+HTTP/1.1 429 Too Many Requests
+X-RateLimit-Exceeded: true
+X-RateLimit-Key: ip:127.0.0.1
+```
+
+### 6.5 Rate Limiting 동작 흐름
+
+```
+1. 요청 수신
+   ↓
+2. Rate Limiting 키 결정
+   - 인증된 사용자: user:{username}
+   - 비인증 요청: ip:{ip-address}
+   ↓
+3. RateLimiter 인스턴스 조회 또는 생성
+   - ip-rate-limiter: IP별 제한 (초당 10개)
+   - user-rate-limiter: 사용자별 제한 (초당 50개)
+   ↓
+4. Rate Limit 확인
+   - 허용: 다음 필터로 전달
+   - 초과: 429 응답 반환
+```
+
+### 6.6 Rate Limiting 모니터링
+
+**Actuator 엔드포인트**:
+- `/actuator/ratelimiters`: RateLimiter 상태 확인
+- `/actuator/ratelimiterevents`: RateLimiter 이벤트 확인
+
+**설정**:
+```yaml
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ratelimiters,ratelimiterevents
+```
+
+**RateLimiter 상태 확인**:
+```http
+GET http://localhost:8080/actuator/ratelimiters
+```
+
+**응답 예시**:
+```json
+{
+  "ip-rate-limiter": {
+    "state": "ACTIVE",
+    "availablePermissions": 8,
+    "numberOfWaitingThreads": 0
+  },
+  "user-rate-limiter": {
+    "state": "ACTIVE",
+    "availablePermissions": 45,
+    "numberOfWaitingThreads": 0
+  }
+}
+```
+
+### 6.7 Rate Limiting 테스트
+
+**테스트 시나리오**:
+1. **정상 요청**: Rate Limit 내에서 요청 시 정상 응답
+2. **Rate Limit 초과**: 초당 제한을 초과하는 요청 시 429 응답
+3. **Rate Limit 리셋**: 1초 후 제한이 리셋되어 다시 요청 가능
+
+**테스트 예시**:
+```bash
+# 10개의 요청을 빠르게 전송
+for i in {1..12}; do
+  curl -X GET http://localhost:8080/api/members/1
+  echo ""
+done
+
+# 11번째 요청부터 429 응답
+```
+
+**예상 결과**:
+- 1-10번째 요청: 정상 응답 (200 OK)
+- 11-12번째 요청: 429 Too Many Requests
+
+### 6.8 Rate Limiting 고급 설정
+
+**서비스별 다른 Rate Limit 설정**:
+특정 서비스에 대해 다른 Rate Limit을 적용하려면 라우트별로 필터를 추가할 수 있습니다.
+
+```yaml
+spring:
+  cloud:
+    gateway:
+      routes:
+        - id: member-service-api
+          uri: lb://member-service
+          predicates:
+            - Path=/api/members/**
+          filters:
+            - RateLimitingFilter  # 특정 라우트에만 적용
+```
+
+**사용자별 Rate Limit 비활성화**:
+IP별 Rate Limiting만 사용하려면 설정에서 `userBasedRateLimitEnabled: false`로 설정할 수 있습니다.
+
+---
+
+## 7. CORS 설정
 
 ### 6.1 글로벌 CORS 설정
 
@@ -699,7 +888,7 @@ Access-Control-Allow-Credentials: true
 
 ---
 
-## 7. 요청 로깅
+## 8. 요청 로깅
 
 ### 7.1 로깅 필터
 
@@ -762,7 +951,7 @@ logging:
 
 ---
 
-## 8. API 엔드포인트
+## 9. API 엔드포인트
 
 ### 8.1 Gateway 헬스 체크
 
@@ -890,7 +1079,7 @@ DELETE http://localhost:8080/api/orders/{id}
 
 ---
 
-## 9. 실습 가이드
+## 10. 실습 가이드
 
 ### 9.1 Gateway Service 실행
 
@@ -1214,6 +1403,8 @@ Gateway Service를 이해했다면, 다음 단계로 진행하세요:
 - [ ] Order Service 라우팅 테스트 (인증 필요)
 - [ ] 인증 필터 동작 확인 (화이트리스트, 토큰 검증)
 - [ ] Circuit Breaker 동작 확인
+- [ ] Rate Limiting 동작 확인 (IP별, 사용자별)
+- [ ] Rate Limit 초과 시 429 응답 확인
 - [ ] CORS 설정 확인
 - [ ] 요청 로깅 확인
 - [ ] Fallback 핸들러 동작 확인

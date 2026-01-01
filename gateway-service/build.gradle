@@ -14,6 +14,10 @@ dependencies {
     // Circuit Breaker 지원
     implementation 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-reactor-resilience4j'
     
+    // Resilience4j RateLimiter 지원
+    implementation 'io.github.resilience4j:resilience4j-ratelimiter'
+    implementation 'io.github.resilience4j:resilience4j-reactor'
+    
     // Load Balancer 지원
     implementation 'org.springframework.cloud:spring-cloud-starter-loadbalancer'
 
@@ -28,4 +32,9 @@ dependencies {
     // Lombok 지원
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
+
+    // 테스트 의존성
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'io.projectreactor:reactor-test'
+    testImplementation 'org.mockito:mockito-core'
 }

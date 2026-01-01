@@ -205,11 +205,11 @@ resilience4j:
 - Rate Limiting 전략 및 모니터링
 
 ### ✅ 완료 기준
-- [ ] RateLimiter 설정 완료
-- [ ] Rate Limiting 필터 구현
-- [ ] Gateway 라우팅에 적용
-- [ ] Rate Limiting 동작 확인
-- [ ] 문서화 완료
+- [x] RateLimiter 설정 완료
+- [x] Rate Limiting 필터 구현
+- [x] Gateway 라우팅에 적용
+- [x] Rate Limiting 동작 확인 (7개 단위 테스트 + 통합 테스트)
+- [x] 문서화 완료 (HOW-TO-RUN-TESTS.md, 테스트 스크립트)
 
 ---
 
@@ -449,9 +449,9 @@ implementation 'io.micrometer:micrometer-registry-prometheus'
 - [x] 상태: ✅ 완료
 
 ### 3단계: Gateway Service Rate Limiting
-- [ ] 시작일: ____
-- [ ] 완료일: ____
-- [ ] 상태: ⬜ 미시작 / 🟡 진행중 / ✅ 완료
+- [x] 시작일: 2025-12-19
+- [x] 완료일: 2025-12-19
+- [x] 상태: ✅ 완료
 
 ### 4단계: Auth Service JWT 리프레시 토큰
 - [ ] 시작일: ____

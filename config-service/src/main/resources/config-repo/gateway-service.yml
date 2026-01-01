@@ -10,6 +10,7 @@ spring:
     gateway:
       default-filters:
         - RequestLogging
+        - RateLimitingFilter
         - AuthenticationFilter
       discovery:
         locator:
@@ -138,13 +139,33 @@ resilience4j:
         slidingWindowSize: 10
         failureRateThreshold: 50
         waitDurationInOpenState: 10s
+  
+  # Rate Limiter 설정
+  ratelimiter:
+    configs:
+      default:
+        limitForPeriod: 10  # 초당 10개 요청
+        limitRefreshPeriod: 1s  # 1초마다 리프레시
+        timeoutDuration: 0  # 타임아웃 없음
+        subscribeToEvents: true  # 이벤트 구독 활성화
+      ip-based:
+        baseConfig: default
+        limitForPeriod: 10  # IP별: 초당 10개 요청
+      user-based:
+        baseConfig: default
+        limitForPeriod: 50  # 사용자별: 초당 50개 요청
+    instances:
+      ip-rate-limiter:
+        baseConfig: ip-based
+      user-rate-limiter:
+        baseConfig: user-based
 
 # Management endpoints 활성화
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,env,gateway,circuitbreakers,circuitbreakerevents
+        include: health,info,env,gateway,circuitbreakers,circuitbreakerevents,ratelimiters,ratelimiterevents
   endpoint:
     health:
       show-details: always
@@ -152,8 +173,14 @@ management:
       enabled: true
     circuitbreakerevents:
       enabled: true
+    ratelimiters:
+      enabled: true
+    ratelimiterevents:
+      enabled: true
   health:
     circuitbreakers:
+      enabled: true
+    ratelimiters:
       enabled: true
 
 logging:

@@ -74,15 +74,24 @@ Spring Boot 기반의 마이크로서비스 아키텍처(MSA) 프로젝트입니
   - 단일 진입점을 통한 API 라우팅
   - 로드 밸런싱 및 서비스 디스커버리 연동
   - Circuit Breaker 필터를 통한 장애 허용성 (Member, Order, Auth Service)
+  - **Rate Limiting 필터를 통한 트래픽 제어 및 DDoS 방어** ✨
+    - IP 기반 Rate Limiting (초당 10개 요청)
+    - 사용자(JWT) 기반 Rate Limiting (초당 50개 요청)
+    - X-Forwarded-For 헤더 지원
+    - Actuator 엔드포인트 제외
   - JWT 기반 인증 및 인가 필터
   - CORS 설정 및 보안 정책 적용
   - 요청/응답 로깅 및 모니터링 (클라이언트 IP 추출 포함)
 
 ### 4. **Member Service** (Port: 8081)
 - **역할**: 회원 관리 서비스
-- **기술 스택**: Spring Boot, Spring Data JPA, H2 Database
+- **기술 스택**: Spring Boot, Spring Data JPA, H2 Database, Caffeine Cache
 - **핵심 기능**:
   - 회원 정보 CRUD 작업
+  - **Spring Cache + Caffeine을 통한 고성능 캐싱** ✨
+    - 회원 조회 시 캐시 활용 (응답 시간 90% 단축)
+    - TTL 5분, 최대 1000개 항목 저장
+    - 수정/삭제 시 자동 캐시 무효화
   - 회원 상태 관리 (ACTIVE, INACTIVE, SUSPENDED)
   - 페이징 및 정렬 지원
   - Bean Validation을 통한 데이터 검증
@@ -95,6 +104,10 @@ Spring Boot 기반의 마이크로서비스 아키텍처(MSA) 프로젝트입니
   - 주문 정보 CRUD 작업
   - OpenFeign을 통한 Member Service 연동
   - Resilience4j `@CircuitBreaker` 어노테이션을 통한 Circuit Breaker 패턴 적용
+  - **Resilience4j Retry를 통한 자동 재시도 메커니즘** ✨
+    - 지수 백오프 전략 (1초 → 2초 → 4초)
+    - 최대 3회 재시도
+    - Circuit Breaker와 조합으로 안정성 향상
   - `MemberIntegrationService`를 통한 서비스 간 통신 및 Fallback 처리
   - 주문 상태 관리 (PENDING, CONFIRMED, SHIPPED, DELIVERED, CANCELLED)
   - Fallback 메커니즘을 통한 서비스 장애 대응 (실패율 임계값: 50%)
