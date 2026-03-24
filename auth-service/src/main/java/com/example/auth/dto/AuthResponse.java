@@ -8,6 +8,7 @@ import lombok.Getter;
 public class AuthResponse {
 
     private final String accessToken;
+    private final String refreshToken;
     private final String tokenType;
     private final long expiresIn;
     private final String username;

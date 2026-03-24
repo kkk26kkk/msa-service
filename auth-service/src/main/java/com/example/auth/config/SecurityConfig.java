@@ -44,7 +44,7 @@ public class SecurityConfig {
         http.csrf(AbstractHttpConfigurer::disable)  // CSRF 보호 비활성화 (REST API)
             .authorizeHttpRequests(auth -> auth
                 // 인증 없이 접근 가능한 경로
-                .requestMatchers("/auth/login", "/auth/health", "/actuator/**", "/h2-console/**").permitAll()
+                .requestMatchers("/auth/login", "/auth/refresh", "/auth/logout", "/auth/health", "/actuator/**", "/h2-console/**").permitAll()
                 // 나머지 모든 요청은 인증 필요
                 .anyRequest().authenticated())
             // Stateless 세션 정책: JWT 기반 인증이므로 세션을 생성하지 않음

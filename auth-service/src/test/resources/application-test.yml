@@ -1,0 +1,29 @@
+spring:
+  cloud:
+    config:
+      enabled: false
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+  h2:
+    console:
+      enabled: true
+
+security:
+  jwt:
+    secret: test-secret-key-for-jwt-token-generation-minimum-256-bits-required-for-hs256-algorithm-testing
+    access-token-validity-seconds: 900
+    refresh-token-validity-seconds: 604800
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+

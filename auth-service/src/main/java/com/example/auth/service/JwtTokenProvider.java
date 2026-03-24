@@ -31,21 +31,23 @@ import java.util.stream.Collectors;
 public class JwtTokenProvider {
 
     private final SecretKey secretKey;  // JWT 서명에 사용되는 비밀키 (HMAC SHA-256)
-    private final long validitySeconds; // 토큰 유효 기간 (초 단위)
+    private final long accessTokenValiditySeconds; // Access Token 유효 기간 (초 단위)
+    private final long refreshTokenValiditySeconds; // Refresh Token 유효 기간 (초 단위)
 
     /**
      * JWT 설정 정보를 받아 SecretKey와 유효 기간을 초기화
      * 
-     * @param properties JWT 설정 속성 (secret, accessTokenValiditySeconds)
+     * @param properties JWT 설정 속성 (secret, accessTokenValiditySeconds, refreshTokenValiditySeconds)
      */
     public JwtTokenProvider(JwtProperties properties) {
         // 설정 파일의 secret 문자열을 HMAC SHA-256 알고리즘용 SecretKey로 변환
         this.secretKey = Keys.hmacShaKeyFor(properties.getSecret().getBytes(StandardCharsets.UTF_8));
-        this.validitySeconds = properties.getAccessTokenValiditySeconds();
+        this.accessTokenValiditySeconds = properties.getAccessTokenValiditySeconds();
+        this.refreshTokenValiditySeconds = properties.getRefreshTokenValiditySeconds();
     }
 
     /**
-     * 인증된 사용자 정보를 기반으로 JWT 토큰을 생성
+     * 인증된 사용자 정보를 기반으로 Access Token을 생성
      * 
      * 토큰에 포함되는 정보:
      * - subject: 사용자명 (username)
@@ -54,9 +56,42 @@ public class JwtTokenProvider {
      * - expiration: 토큰 만료 시간
      * 
      * @param authentication Spring Security의 인증 객체
+     * @return 생성된 Access Token 문자열
+     */
+    public String generateAccessToken(Authentication authentication) {
+        return generateToken(authentication, accessTokenValiditySeconds);
+    }
+
+    /**
+     * 사용자명을 기반으로 Refresh Token을 생성
+     * 
+     * Refresh Token은 Access Token과 달리 역할 정보를 포함하지 않습니다.
+     * 
+     * @param username 사용자명
+     * @return 생성된 Refresh Token 문자열
+     */
+    public String generateRefreshToken(String username) {
+        Instant now = Instant.now();
+        Instant expiry = now.plusSeconds(refreshTokenValiditySeconds);
+
+        // Refresh Token은 사용자명만 포함 (역할 정보 제외)
+        return Jwts.builder()
+                .subject(username)                        // 사용자명 (토큰의 주체)
+                .claim("type", "refresh")                 // 토큰 타입 표시
+                .issuedAt(Date.from(now))                 // 토큰 발급 시간
+                .expiration(Date.from(expiry))            // 토큰 만료 시간
+                .signWith(secretKey)                      // SecretKey로 서명
+                .compact();                               // 최종 JWT 문자열 생성
+    }
+
+    /**
+     * 인증된 사용자 정보를 기반으로 JWT 토큰을 생성 (내부 메서드)
+     * 
+     * @param authentication Spring Security의 인증 객체
+     * @param validitySeconds 토큰 유효 기간 (초 단위)
      * @return 생성된 JWT 토큰 문자열
      */
-    public String generateToken(Authentication authentication) {
+    private String generateToken(Authentication authentication, long validitySeconds) {
         Instant now = Instant.now();
         Instant expiry = now.plusSeconds(validitySeconds);
 
@@ -70,6 +105,7 @@ public class JwtTokenProvider {
         return Jwts.builder()
                 .subject(authentication.getName())        // 사용자명 (토큰의 주체)
                 .claim("roles", roles)                   // 사용자 역할 목록 (커스텀 클레임)
+                .claim("type", "access")                 // 토큰 타입 표시
                 .issuedAt(Date.from(now))                 // 토큰 발급 시간
                 .expiration(Date.from(expiry))            // 토큰 만료 시간
                 .signWith(secretKey)                      // SecretKey로 서명
@@ -94,7 +130,11 @@ public class JwtTokenProvider {
                 .getPayload();                            // Payload(Claims) 추출
     }
 
-    public long getValiditySeconds() {
-        return validitySeconds;
+    public long getAccessTokenValiditySeconds() {
+        return accessTokenValiditySeconds;
+    }
+
+    public long getRefreshTokenValiditySeconds() {
+        return refreshTokenValiditySeconds;
     }
 }

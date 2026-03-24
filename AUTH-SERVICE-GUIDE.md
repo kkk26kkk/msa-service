@@ -22,7 +22,9 @@
 **Auth Service**는 JWT(JSON Web Token) 기반 인증/인가를 담당하는 서비스입니다.
 
 **주요 기능**:
-- 사용자 로그인 및 JWT 토큰 발급
+- 사용자 로그인 및 JWT 토큰 발급 (Access Token + Refresh Token)
+- 토큰 갱신 API (Refresh Token을 사용한 Access Token 갱신)
+- 로그아웃 API (Refresh Token 무효화)
 - 사용자 등록 및 관리
 - 비밀번호 암호화 (BCrypt)
 - 역할 기반 권한 관리 (ROLE_ADMIN, ROLE_USER)
@@ -60,17 +62,21 @@ auth-service/
 │   │   └── GlobalExceptionHandler.java # 전역 예외 처리
 │   ├── dto/
 │   │   ├── LoginRequest.java           # 로그인 요청 DTO
-│   │   └── AuthResponse.java           # 인증 응답 DTO
+│   │   ├── AuthResponse.java           # 인증 응답 DTO
+│   │   └── RefreshTokenRequest.java    # Refresh Token 요청 DTO
 │   ├── entity/
-│   │   └── AuthUser.java               # 사용자 엔티티
+│   │   ├── AuthUser.java               # 사용자 엔티티
+│   │   └── RefreshToken.java           # Refresh Token 엔티티
 │   ├── repository/
-│   │   └── AuthUserRepository.java     # 사용자 리포지토리
+│   │   ├── AuthUserRepository.java     # 사용자 리포지토리
+│   │   └── RefreshTokenRepository.java # Refresh Token 리포지토리
 │   ├── security/
 │   │   └── SecurityRoles.java          # 역할 상수 정의
 │   └── service/
 │       ├── AuthService.java            # 사용자 등록 서비스
 │       ├── AuthUserDetailsService.java # Spring Security UserDetailsService
-│       └── JwtTokenProvider.java       # JWT 토큰 생성/검증
+│       ├── JwtTokenProvider.java       # JWT 토큰 생성/검증
+│       └── TokenService.java           # Refresh Token 관리 서비스
 ```
 
 ### 2.2 메인 애플리케이션 클래스
@@ -349,7 +355,9 @@ public class AuthController {
 ```
 
 **API 엔드포인트**:
-- `POST /auth/login`: 로그인 및 JWT 토큰 발급
+- `POST /auth/login`: 로그인 및 JWT 토큰 발급 (Access Token + Refresh Token)
+- `POST /auth/refresh`: Refresh Token을 사용한 토큰 갱신
+- `POST /auth/logout`: 로그아웃 (Refresh Token 무효화)
 - `GET /auth/health`: 헬스 체크
 
 ### 2.9 초기 데이터 생성: DataInitializer
@@ -552,7 +560,8 @@ spring:
 security:
   jwt:
     secret: change-me-please-change-me-please-32
-    access-token-validity-seconds: 1800
+    access-token-validity-seconds: 900  # 15분
+    refresh-token-validity-seconds: 604800  # 7일
 ```
 
 ### 5.2 JWT 설정 속성: JwtProperties
@@ -561,7 +570,8 @@ security:
 @ConfigurationProperties(prefix = "security.jwt")
 public class JwtProperties {
     private String secret;  // JWT 서명용 비밀키
-    private long accessTokenValiditySeconds;  // 토큰 유효 기간 (초)
+    private long accessTokenValiditySeconds;  // Access Token 유효 기간 (초)
+    private long refreshTokenValiditySeconds;  // Refresh Token 유효 기간 (초)
 }
 ```
 
@@ -576,7 +586,8 @@ public class JwtProperties {
 | CSRF | 비활성화 | REST API이므로 불필요 |
 | 세션 | Stateless | JWT 기반 인증이므로 세션 사용 안 함 |
 | 비밀번호 암호화 | BCrypt | 단방향 해시 알고리즘 |
-| 토큰 유효 기간 | 1800초 (30분) | 설정 파일에서 변경 가능 |
+| Access Token 유효 기간 | 900초 (15분) | 설정 파일에서 변경 가능 |
+| Refresh Token 유효 기간 | 604800초 (7일) | 설정 파일에서 변경 가능 |
 
 ---
 
@@ -615,8 +626,9 @@ curl -X POST http://localhost:8083/auth/login \
 ```json
 {
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "tokenType": "Bearer",
-  "expiresIn": 1800,
+  "expiresIn": 900,
   "username": "admin",
   "roles": ["ROLE_ADMIN"]
 }
@@ -640,7 +652,53 @@ curl -X POST http://localhost:8083/auth/login \
 
 **중요**: SECRET 필드에 정확한 값을 입력하지 않으면 "Invalid Signature" 오류가 발생합니다.
 
-### 6.5 헬스 체크
+### 6.5 토큰 갱신 테스트
+
+Access Token이 만료되면 Refresh Token을 사용하여 새로운 토큰을 발급받을 수 있습니다.
+
+#### 6.5.1 Refresh Token으로 토큰 갱신
+
+```bash
+curl -X POST http://localhost:8083/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }'
+```
+
+**예상 응답**:
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 900,
+  "username": "admin",
+  "roles": ["ROLE_ADMIN"]
+}
+```
+
+**참고**: 
+- Refresh Token도 함께 갱신됩니다 (기존 Refresh Token은 무효화됨)
+- Refresh Token이 만료되었거나 무효한 경우 401 Unauthorized 응답
+
+### 6.6 로그아웃 테스트
+
+Refresh Token을 무효화하여 로그아웃을 처리합니다.
+
+```bash
+curl -X POST http://localhost:8083/auth/logout \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }'
+```
+
+**예상 응답**: `"Logout successful"`
+
+**참고**: 로그아웃 후 해당 Refresh Token은 더 이상 사용할 수 없습니다.
+
+### 6.7 헬스 체크
 
 ```bash
 curl http://localhost:8083/auth/health
@@ -681,7 +739,7 @@ curl -X POST http://localhost:8083/auth/login \
 
 **예상 응답**: 401 Unauthorized
 
-### 6.7 데이터베이스 확인 (H2 Console)
+### 6.8 데이터베이스 확인 (H2 Console)
 
 1. http://localhost:8083/h2-console 접속
 2. JDBC URL: `jdbc:h2:mem:authdb`
@@ -691,7 +749,135 @@ curl -X POST http://localhost:8083/auth/login \
 
 ---
 
-## 7. 핵심 개념 정리
+## 7. Refresh Token 구현 상세
+
+### 7.1 Refresh Token 개요
+
+Refresh Token은 Access Token의 보안을 강화하기 위해 도입된 메커니즘입니다.
+
+**주요 특징**:
+- **Access Token**: 짧은 만료 시간 (15분) - 자주 갱신
+- **Refresh Token**: 긴 만료 시간 (7일) - 데이터베이스에 저장
+- **보안**: Access Token이 탈취되어도 짧은 시간 내에 만료
+- **사용자 경험**: Refresh Token으로 자동 갱신 가능
+
+### 7.2 토큰 구조
+
+#### Access Token
+```json
+{
+  "sub": "admin",
+  "roles": ["ROLE_ADMIN"],
+  "type": "access",
+  "iat": 1704067200,
+  "exp": 1704068100
+}
+```
+
+#### Refresh Token
+```json
+{
+  "sub": "admin",
+  "type": "refresh",
+  "iat": 1704067200,
+  "exp": 1704672000
+}
+```
+
+**차이점**:
+- Refresh Token에는 `roles` 정보가 포함되지 않음
+- Refresh Token은 `type: "refresh"` 클레임 포함
+
+### 7.3 토큰 갱신 플로우
+
+```
+1. 클라이언트가 Access Token으로 API 호출
+   ↓
+2. Access Token 만료 (401 Unauthorized)
+   ↓
+3. 클라이언트가 Refresh Token으로 /auth/refresh 호출
+   ↓
+4. 서버가 Refresh Token 검증
+   - 데이터베이스에서 Refresh Token 조회
+   - 만료 시간 확인
+   - revoked 상태 확인
+   ↓
+5. 새로운 Access Token과 Refresh Token 발급
+   ↓
+6. 기존 Refresh Token 삭제 (데이터베이스)
+   ↓
+7. 새로운 Refresh Token 저장 (데이터베이스)
+   ↓
+8. 새로운 토큰들을 클라이언트에 반환
+```
+
+### 7.4 RefreshToken 엔티티
+
+```java
+@Entity
+@Table(name = "refresh_tokens")
+public class RefreshToken {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, unique = true, length = 500)
+    private String token;
+
+    @Column(nullable = false, length = 50)
+    private String username;
+
+    @Column(nullable = false)
+    private LocalDateTime expiresAt;
+
+    @Column(nullable = false)
+    private boolean revoked = false;
+
+    @CreationTimestamp
+    private LocalDateTime createdAt;
+}
+```
+
+**주요 필드**:
+- `token`: Refresh Token 문자열
+- `username`: 사용자명
+- `expiresAt`: 만료 시간
+- `revoked`: 무효화 여부 (로그아웃 시 true)
+
+### 7.5 TokenService
+
+```java
+@Service
+public class TokenService {
+    private final RefreshTokenRepository refreshTokenRepository;
+
+    // Refresh Token 저장
+    public RefreshToken saveRefreshToken(String token, String username, LocalDateTime expiresAt);
+
+    // Refresh Token 검증
+    public Optional<RefreshToken> validateRefreshToken(String token);
+
+    // Refresh Token 삭제 (로그아웃)
+    public void deleteRefreshToken(String token);
+
+    // 사용자의 모든 Refresh Token 삭제
+    public void deleteRefreshTokensByUsername(String username);
+
+    // 만료된 토큰 정리
+    public void cleanupExpiredTokens();
+}
+```
+
+### 7.6 보안 고려사항
+
+1. **Refresh Token 저장**: 데이터베이스에 저장하여 서버에서 관리
+2. **토큰 로테이션**: Refresh Token도 함께 갱신하여 보안 강화
+3. **로그아웃 처리**: Refresh Token을 즉시 무효화
+4. **만료 토큰 정리**: 주기적으로 만료된 토큰 삭제
+
+---
+
+## 8. 핵심 개념 정리
 
 ### 7.1 JWT (JSON Web Token)
 
@@ -721,7 +907,7 @@ curl -X POST http://localhost:8083/auth/login \
 
 ---
 
-## 8. 다음 단계
+## 9. 다음 단계
 
 Auth Service를 이해했다면, 다음 단계로 진행하세요:
 
@@ -731,12 +917,14 @@ Auth Service를 이해했다면, 다음 단계로 진행하세요:
 
 ---
 
-## 9. 실습 체크리스트
+## 10. 실습 체크리스트
 
 - [ ] Auth Service 실행
 - [ ] 기본 사용자 계정 확인 (admin, member)
-- [ ] 로그인 API 호출하여 JWT 토큰 발급
+- [ ] 로그인 API 호출하여 Access Token과 Refresh Token 발급
 - [ ] JWT 토큰을 jwt.io에서 디코딩하여 내용 확인
+- [ ] Refresh Token으로 토큰 갱신 API 호출
+- [ ] 로그아웃 API 호출하여 Refresh Token 무효화 확인
 - [ ] 잘못된 비밀번호로 로그인 시도하여 에러 응답 확인
-- [ ] H2 Console에서 사용자 데이터 확인
+- [ ] H2 Console에서 사용자 데이터 및 Refresh Token 데이터 확인
 - [ ] 헬스 체크 API 호출
