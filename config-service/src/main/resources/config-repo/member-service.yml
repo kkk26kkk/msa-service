@@ -27,6 +27,19 @@ spring:
   sql:
     init:
       mode: always
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring:
+          json:
+            add:
+              type:
+                headers: false
+    template:
+      default-topic: member.created.v1
 
   # 캐시 설정
   cache:
@@ -59,3 +72,8 @@ security:
   enabled: true
   jwt:
     secret: change-me-please-change-me-please-32
+
+app:
+  kafka:
+    topics:
+      member-created: member.created.v1

@@ -1,0 +1,7 @@
+feat(order-service): Kafka 이벤트 발행·구독 및 DLT 재시도 메커니즘 구현
+
+- member-service/order-service에 spring-kafka 의존성과 config-repo Kafka 설정(토픽, consumer group, 직렬화) 추가
+- MemberCreatedEvent, OrderCreatedEvent, OrderStatusChangedEvent 이벤트 모델 정의 및 발행 로직 구현
+- order-service에 MemberEventConsumer(@KafkaListener)와 eventId 기반 중복 처리(idempotency) 적용
+- DefaultErrorHandler + FixedBackOff + DeadLetterPublishingRecoverer로 재시도 및 DLT(member.created.v1.DLT) 라우팅 구성
+- Embedded Kafka 통합 테스트와 이벤트 발행 단위 테스트 추가, 5단계 문서 및 체크리스트 업데이트

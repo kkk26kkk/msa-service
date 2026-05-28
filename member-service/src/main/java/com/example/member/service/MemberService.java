@@ -3,6 +3,7 @@ package com.example.member.service;
 import com.example.member.dto.MemberDto;
 import com.example.member.entity.Member;
 import com.example.member.exception.MemberNotFoundException;
+import com.example.member.messaging.MemberEventPublisher;
 import com.example.member.exception.DuplicateMemberException;
 import com.example.member.repository.MemberRepository;
 import org.slf4j.Logger;
@@ -30,10 +31,16 @@ public class MemberService {
     private static final Logger log = LoggerFactory.getLogger(MemberService.class);
     private final MemberRepository memberRepository;
     private final CacheManager cacheManager;
+    private final MemberEventPublisher memberEventPublisher;
 
-    public MemberService(MemberRepository memberRepository, CacheManager cacheManager) {
+    public MemberService(
+            MemberRepository memberRepository,
+            CacheManager cacheManager,
+            MemberEventPublisher memberEventPublisher
+    ) {
         this.memberRepository = memberRepository;
         this.cacheManager = cacheManager;
+        this.memberEventPublisher = memberEventPublisher;
     }
 
     /**
@@ -58,6 +65,7 @@ public class MemberService {
         // 엔터티 생성 및 저장
         Member member = request.toEntity();
         Member savedMember = memberRepository.save(member);
+        memberEventPublisher.publishMemberCreated(savedMember);
 
         log.info("Member created successfully with ID: {}", savedMember.getId());
         return MemberDto.Response.from(savedMember);

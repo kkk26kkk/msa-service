@@ -27,6 +27,27 @@ spring:
   sql:
     init:
       mode: always
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring:
+          json:
+            add:
+              type:
+                headers: false
+    consumer:
+      group-id: order-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring:
+          json:
+            trusted:
+              packages: "*"
 
 # Member Service URL 설정 (로컬 개발용)
 member-service:
@@ -100,3 +121,15 @@ logging:
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE
     io.github.resilience4j.retry: DEBUG
+    org.springframework.kafka: INFO
+
+app:
+  kafka:
+    topics:
+      member-created: member.created.v1
+      member-created-dlt: member.created.v1.DLT
+      order-created: order.created.v1
+      order-status-changed: order.status.changed.v1
+    consumer:
+      max-retry-attempts: 3
+      backoff-ms: 1000

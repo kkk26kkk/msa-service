@@ -6,6 +6,7 @@ import com.example.order.entity.Order;
 import com.example.order.exception.OrderNotFoundException;
 import com.example.order.exception.InvalidOrderException;
 import com.example.order.repository.OrderRepository;
+import com.example.order.messaging.OrderEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -34,10 +35,16 @@ public class OrderService {
     
     private final OrderRepository orderRepository;
     private final MemberIntegrationService memberIntegrationService;
+    private final OrderEventPublisher orderEventPublisher;
 
-    public OrderService(OrderRepository orderRepository, MemberIntegrationService memberIntegrationService) {
+    public OrderService(
+            OrderRepository orderRepository,
+            MemberIntegrationService memberIntegrationService,
+            OrderEventPublisher orderEventPublisher
+    ) {
         this.orderRepository = orderRepository;
         this.memberIntegrationService = memberIntegrationService;
+        this.orderEventPublisher = orderEventPublisher;
     }
 
     /**
@@ -56,6 +63,7 @@ public class OrderService {
         // 3. 엔터티 생성 및 저장
         Order order = request.toEntity();
         Order savedOrder = orderRepository.save(order);
+        orderEventPublisher.publishOrderCreated(savedOrder);
 
         log.info("Order created successfully with ID: {}", savedOrder.getId());
         
@@ -160,6 +168,7 @@ public class OrderService {
 
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new OrderNotFoundException("주문을 찾을 수 없습니다. ID: " + id));
+        String previousStatus = order.getStatus().name();
 
         // 수정 가능한 필드 업데이트
         if (request.getQuantity() != null) {
@@ -185,6 +194,9 @@ public class OrderService {
         }
 
         Order updatedOrder = orderRepository.save(order);
+        if (!previousStatus.equals(updatedOrder.getStatus().name())) {
+            orderEventPublisher.publishOrderStatusChanged(updatedOrder, previousStatus);
+        }
         log.info("Order updated successfully with ID: {}", updatedOrder.getId());
 
         // 회원 정보 조회 (MemberIntegrationService를 통한 호출로 @CircuitBreaker 작동 보장)

@@ -1297,3 +1297,22 @@ Order Service를 이해했다면, 다음 단계로 진행하세요:
 - [ ] 재시도 로그 확인
 - [ ] 지수 백오프 동작 확인
 - [ ] Retry 이벤트 확인
+
+---
+
+## 12. Kafka 이벤트 아키텍처 (5단계)
+
+Order Service는 Kafka 기반 이벤트 발행/구독을 지원합니다.
+
+발행 이벤트:
+- `OrderCreatedEvent` (`order.created.v1`)
+- `OrderStatusChangedEvent` (`order.status.changed.v1`)
+
+구독 이벤트:
+- `MemberCreatedEvent` (`member.created.v1`)
+- 소비 컴포넌트: `com.example.order.messaging.MemberEventConsumer`
+
+오류 처리:
+- `DefaultErrorHandler` + FixedBackOff 재시도
+- 최종 실패 메시지 DLT 전송: `member.created.v1.DLT`
+- 설정 클래스: `com.example.order.config.KafkaConfig`

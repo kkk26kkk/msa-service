@@ -3,6 +3,7 @@ package com.example.member.service;
 import com.example.member.dto.MemberDto;
 import com.example.member.entity.Member;
 import com.example.member.exception.MemberNotFoundException;
+import com.example.member.messaging.MemberEventPublisher;
 import com.example.member.exception.DuplicateMemberException;
 import com.example.member.repository.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.CacheManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -36,6 +38,12 @@ class MemberServiceTest {
 
     @Mock
     private MemberRepository memberRepository;
+
+    @Mock
+    private CacheManager cacheManager;
+
+    @Mock
+    private MemberEventPublisher memberEventPublisher;
 
     @InjectMocks
     private MemberService memberService;
@@ -93,6 +101,7 @@ class MemberServiceTest {
         verify(memberRepository).existsByUsername(createRequest.getUsername());
         verify(memberRepository).existsByEmail(createRequest.getEmail());
         verify(memberRepository).save(any(Member.class));
+        verify(memberEventPublisher).publishMemberCreated(any(Member.class));
     }
 
     @Test
@@ -267,13 +276,13 @@ class MemberServiceTest {
     void deleteMember_Success() {
         // Given
         Long memberId = 1L;
-        when(memberRepository.existsById(memberId)).thenReturn(true);
+        when(memberRepository.findById(memberId)).thenReturn(Optional.of(testMember));
 
         // When
         memberService.deleteMember(memberId);
 
         // Then
-        verify(memberRepository).existsById(memberId);
+        verify(memberRepository).findById(memberId);
         verify(memberRepository).deleteById(memberId);
     }
 
@@ -282,13 +291,13 @@ class MemberServiceTest {
     void deleteMember_NotFound() {
         // Given
         Long memberId = 999L;
-        when(memberRepository.existsById(memberId)).thenReturn(false);
+        when(memberRepository.findById(memberId)).thenReturn(Optional.empty());
 
         // When & Then
         assertThatThrownBy(() -> memberService.deleteMember(memberId))
                 .isInstanceOf(MemberNotFoundException.class);
 
-        verify(memberRepository).existsById(memberId);
+        verify(memberRepository).findById(memberId);
         verify(memberRepository, never()).deleteById(anyLong());
     }
 

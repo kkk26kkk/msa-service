@@ -25,6 +25,9 @@ dependencies {
     // Spring AOP (Resilience4j 어노테이션 작동을 위해 필수)
     implementation 'org.springframework.boot:spring-boot-starter-aop'
     
+    // Kafka 이벤트 발행/구독
+    implementation 'org.springframework.kafka:spring-kafka'
+    
     // Actuator 지원
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     
@@ -37,4 +40,7 @@ dependencies {
     
     // 개발 도구
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
+    // Kafka 테스트
+    testImplementation 'org.springframework.kafka:spring-kafka-test'
 }

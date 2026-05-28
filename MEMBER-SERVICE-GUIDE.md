@@ -1259,3 +1259,18 @@ Member Service를 이해했다면, 다음 단계로 진행하세요:
 - [ ] 캐시 동작 확인 (로그에서 "cache miss" 확인)
 - [ ] 캐시 히트 확인 (동일한 회원 조회 시 DB 쿼리 없음)
 - [ ] 캐시 무효화 확인 (회원 수정 후 캐시 미스 발생)
+
+---
+
+## 12. Kafka 이벤트 발행 (5단계)
+
+Member Service는 회원 생성 시 Kafka로 `MemberCreatedEvent`를 발행합니다.
+
+- 토픽: `member.created.v1`
+- 발행 시점: `MemberService#createMember` 저장 성공 직후
+- 이벤트 모델: `com.example.member.event.MemberCreatedEvent`
+- 발행 컴포넌트: `com.example.member.messaging.MemberEventPublisher`
+
+설정 항목:
+- `spring.kafka.bootstrap-servers`
+- `app.kafka.topics.member-created`
